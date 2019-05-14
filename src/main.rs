@@ -8,8 +8,9 @@
 extern crate panic_semihosting;
 
 use core::fmt::Write;
-use cortex_m::asm;
 use cortex_m_rt::entry;
+use sx1276;
+
 use stm32l0xx_hal::{pac, prelude::*, rcc::Config, serial, spi};
 
 //use nb::block;
@@ -43,14 +44,11 @@ fn main() -> ! {
     // Configure the clock.
     let mut rcc = dp.RCC.freeze(Config::hsi16());
 
-    // Acquire the GPIOA peripheral. This also enables the clock for GPIOA in
-    // the RCC register.
     let gpioa = dp.GPIOA.split(&mut rcc);
 
     let tx_pin = gpioa.pa9;
     let rx_pin = gpioa.pa10;
 
-    // Configure the serial peripheral.
     let serial = dp
         .USART1
         .usart((tx_pin, rx_pin), serial::Config::default(), &mut rcc)
@@ -64,17 +62,19 @@ fn main() -> ! {
     let sck = gpiob.pb3;
     let miso = gpioa.pa6;
     let mosi = gpioa.pa7;
+    let mut nss = gpioa.pa15.into_push_pull_output();
+
+    nss.set_high();
 
     // Initialise the SPI peripheral.
     let mut spi = dp
         .SPI1
         .spi((sck, miso, mosi), spi::MODE_0, 100_000.hz(), &mut rcc);
-    spi.write(&[0, 1]).unwrap();
-    loop {    
-    	asm::nop();
-	    write!(tx, ".").unwrap();
 
-    }
+    radio = sx1276::Sx1276::new(spi, nss);
+
+    write!(tx, "{} reg x{:x}\r\n",0x06, radio.read(0x06)).unwrap();
+
 }
 
 /*

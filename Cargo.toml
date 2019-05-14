@@ -20,6 +20,11 @@ cast = { version = "0.2.2", default-features = false }
 nb = "0.1.2"
 panic-semihosting       = "0.5.2"
 
+[dependencies.sx1276]
+git                     = "https://github.com/lthiery/sx1276-rs.git"
+branch					= "master"
+
+
 [dependencies.stm32l0xx-hal]
 git                     = "https://github.com/lthiery/stm32l0xx-hal.git"
 branch					= "master"

@@ -113,8 +113,6 @@ const APP: () = {
         LongFi::set_buffer(resources.BUFFER);
         LongFi::set_rx();
 
-
-
         let gps_tx_pin = gpioa.pa9;
         let gps_rx_pin = gpioa.pa10;
 
@@ -129,7 +127,6 @@ const APP: () = {
         gps_enable.set_high();
 
         let (mut gps_tx, mut gps_rx) = serial.split();
-
         
         write!(gps_tx, "$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28\r\n").unwrap();
         write!(gps_tx, "$PMTK220,1000*1F\r\n").unwrap();

@@ -2,10 +2,12 @@
 
 So far only tested things on [STM32L0 Discovery kit](https://www.st.com/en/evaluation-tools/b-l072z-lrwan1.html), which features the [STM32L072CZ](https://www.st.com/en/microcontrollers-microprocessors/stm32l072cz.html).
 
+First off, you can use the built-in debugger better if you [turn it into a J-Link](https://www.segger.com/products/debug-probes/j-link/models/other-j-links/st-link-on-board/). The only downside is you lose the virtual UART feature from ST-Link.
+
 Run JLink server:
 `JLinkGDBServer -device STM32L072CZ -speed 4000 -if jtag -AutoConnect -1 -port 3333`
 
-If for some reason, you really want to use openocd:
+If for some reason, you really want to use openocd/ST-Link
 
 `sudo openocd -f ./openocd.cfg`
 

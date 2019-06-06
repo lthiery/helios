@@ -2,32 +2,6 @@
 #![no_main]
 #![feature(lang_items)]
 
-/*
-/*!
- * Board MCU pins definitions
- */
-#define RADIO_RESET                                 PC_0
-
-#define RADIO_MOSI                                  PA_7
-#define RADIO_MISO                                  PA_6
-#define RADIO_SCLK                                  PB_3
-
-#define RADIO_NSS                                   PA_15
-
-#define RADIO_DIO_0                                 PB_4
-#define RADIO_DIO_1                                 PB_1
-#define RADIO_DIO_2                                 PB_0
-#define RADIO_DIO_3                                 PC_13
-#define RADIO_DIO_4                                 PA_5
-#define RADIO_DIO_5                                 PA_4
-
-#define RADIO_TCXO_POWER                            PA_12
-
-#define RADIO_ANT_SWITCH_RX                         PA_1
-#define RADIO_ANT_SWITCH_TX_BOOST                   PC_1
-#define RADIO_ANT_SWITCH_TX_RFO                     PC_2
-*/
-
 extern crate panic_halt;
 use stm32l0xx_hal as hal;
 use sx1276;
@@ -64,6 +38,10 @@ const APP: () = {
         let gpioa = device.GPIOA.split(&mut rcc);
         let gpiob = device.GPIOB.split(&mut rcc);
         let gpioc = device.GPIOC.split(&mut rcc);
+
+        let mut gps_enable = gpioa.pa5.into_push_pull_output();
+
+        gps_enable.set_low();
 
         let tx_pin = gpioa.pa2;
         let rx_pin = gpioa.pa3;
@@ -135,16 +113,26 @@ const APP: () = {
         LongFi::set_buffer(resources.BUFFER);
         LongFi::set_rx();
 
+
+
         let gps_tx_pin = gpioa.pa9;
         let gps_rx_pin = gpioa.pa10;
 
         // Configure the serial peripheral.
-        let serial = device
+        let mut serial = device
             .USART1
             .usart((gps_tx_pin, gps_rx_pin), serial::Config::default(), &mut rcc)
             .unwrap();
 
+        serial.listen(serial::Event::Rxne);
+
+        gps_enable.set_high();
+
         let (mut gps_tx, mut gps_rx) = serial.split();
+
+        
+        write!(gps_tx, "$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28\r\n").unwrap();
+        write!(gps_tx, "$PMTK220,1000*1F\r\n").unwrap();
 
         // Return the initialised resources.
         init::LateResources {
@@ -158,7 +146,7 @@ const APP: () = {
         }
     }
 
-    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, BUFFER])]
+    #[task(capacity = 4, priority = 1, resources = [DEBUG_UART, BUFFER])]
     fn radio_event(event: RfEvent){
         let client_event = LongFi::handle_event(event);
         
@@ -191,7 +179,7 @@ const APP: () = {
         }
     }
 
-    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, COUNT])]
+    #[task(capacity = 4, priority = 1, resources = [DEBUG_UART, COUNT])]
     fn send_ping(){
         write!(resources.DEBUG_UART, "Sending Ping\r\n").unwrap();
         let packet: [u8; 5] = [0xDE, 0xAD, 0xBE, 0xEF, *resources.COUNT];
@@ -199,7 +187,19 @@ const APP: () = {
         LongFi::send(&packet, packet.len());
     }
 
-    #[interrupt(priority = 1, resources = [LED, INT, BUTTON], spawn = [send_ping])]
+    #[task(capacity = 8, priority = 1, resources = [DEBUG_UART])]
+    fn echo(byte: u8) {
+        resources.DEBUG_UART.write(byte);
+    }
+
+    #[interrupt(priority = 2, resources = [GPS_RX], spawn = [echo])]
+    fn USART1() {
+        if let Ok(byte) = resources.GPS_RX.read() {
+            spawn.echo(byte);
+        }
+    }
+
+    #[interrupt(priority = 2, resources = [LED, INT, BUTTON], spawn = [send_ping])]
     fn EXTI2_3() {
         static mut STATE: bool = false;
         // Clear the interrupt flag.
@@ -214,7 +214,7 @@ const APP: () = {
         spawn.send_ping();
     }
 
-    #[interrupt(priority = 1, resources = [SX1276_DIO0, INT], spawn = [radio_event])]
+    #[interrupt(priority = 2, resources = [SX1276_DIO0, INT], spawn = [radio_event])]
     fn EXTI4_15() {
         resources.INT.clear_irq(resources.SX1276_DIO0.i);
         spawn.radio_event(RfEvent::DIO0); 

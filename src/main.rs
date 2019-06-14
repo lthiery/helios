@@ -10,23 +10,30 @@ use sx1276::{RfConfig, QualityOfService, ClientEvent, RfEvent};
 use sx1276::LongFi;
 
 use core::fmt::Write;
-use hal::{exti::TriggerEdge, gpio::*, pac, prelude::*, rcc::Config, spi, serial};
+use hal::{exti, exti::TriggerEdge, gpio::*, pac, prelude::*, rcc::Config, spi, serial};
 use stm32l0;
 
+
+
+#[macro_use] extern crate enum_primitive;
+
+mod bma400;
 
 use embedded_hal::digital::v2::OutputPin;
 
 #[rtfm::app(device = stm32l0xx_hal::pac)]
 const APP: () = {
-    static mut LED: gpiob::PB5<Output<PushPull>> = ();
-    static mut INT: pac::EXTI = ();
-    static mut BUTTON: gpiob::PB2<Input<PullUp>> = ();
+    static mut EXTI: pac::EXTI = ();
     static mut SX1276_DIO0: gpiob::PB4<Input<PullUp>> = ();
+    static mut BMA400_INT1: gpioa::PA0<Input<Floating>> = ();
     static mut DEBUG_UART: serial::Tx<stm32l0::stm32l0x2::USART2> = ();
     static mut BUFFER: [u8; 512] = [0; 512];
     static mut COUNT: u8 = 0;
+    static mut GPS_EN: gpiob::PB2<Output<PushPull>> = ();
     static mut GPS_TX: serial::Tx<stm32l0::stm32l0x2::USART1> = ();
     static mut GPS_RX: serial::Rx<stm32l0::stm32l0x2::USART1> = ();
+    static mut I2C: stm32l0xx_hal::i2c::I2c<stm32l0::stm32l0x2::I2C1, stm32l0xx_hal::gpio::gpiob::PB9<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::OpenDrain>>, stm32l0xx_hal::gpio::gpiob::PB8<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::OpenDrain>>> = ();
+    static mut ACCEL: bma400::Bma400 = ();
 
     #[init(resources = [BUFFER])]
     fn init() -> init::LateResources {
@@ -37,11 +44,7 @@ const APP: () = {
         // the RCC register.
         let gpioa = device.GPIOA.split(&mut rcc);
         let gpiob = device.GPIOB.split(&mut rcc);
-        let gpioc = device.GPIOC.split(&mut rcc);
-
-        let mut gps_enable = gpioa.pa5.into_push_pull_output();
-
-        gps_enable.set_low();
+        let gpioc = device.GPIOC.split(&mut rcc);    
 
         let tx_pin = gpioa.pa2;
         let rx_pin = gpioa.pa3;
@@ -56,31 +59,31 @@ const APP: () = {
 
         write!(tx, "SX1276 test\r\n").unwrap();
 
-        // Configure PB5 as output.
-        let led = gpiob.pb5.into_push_pull_output();
+        // Configure PB2 as input.
+        let mut gps_ldo_en = gpiob.pb2.into_push_pull_output();
 
+        gps_ldo_en.set_high();
+       
         let exti = device.EXTI;
 
-        // Configure PB2 as input.
-        let button = gpiob.pb2.into_pull_up_input();
-        // Configure the external interrupt on the falling edge for the pin 2.
-        exti.listen(
-            &mut rcc,
-            &mut device.SYSCFG_COMP,
-            button.port,
-            button.i,
-            TriggerEdge::Falling,
-        );
-
-        // // Configure PB4 as input.
+        // Configure PB4 as input for rising interrupt
         let sx1276_dio0 = gpiob.pb4.into_pull_up_input();
-        // Configure the external interrupt on the falling edge for the pin 2.
         exti.listen(
             &mut rcc,
             &mut device.SYSCFG_COMP,
             sx1276_dio0.port,
             sx1276_dio0.i,
             TriggerEdge::Rising,
+        );
+
+        // Configure PB5 as input for rising interrupt
+        let accel_int1 = gpioa.pa0.into_floating_input();
+        exti.listen(
+            &mut rcc,
+            &mut device.SYSCFG_COMP,
+            accel_int1.port,
+            accel_int1.i,
+            TriggerEdge::All,
         );
 
         let sck = gpiob.pb3;
@@ -124,24 +127,55 @@ const APP: () = {
 
         serial.listen(serial::Event::Rxne);
 
-        gps_enable.set_high();
-
         let (mut gps_tx, mut gps_rx) = serial.split();
         
         write!(gps_tx, "$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28\r\n").unwrap();
         write!(gps_tx, "$PMTK220,1000*1F\r\n").unwrap();
 
+        let sda = gpiob.pb9.into_open_drain_output();
+        let scl = gpiob.pb8.into_open_drain_output();
+
+        let mut i2c = device
+            .I2C1
+            .i2c(sda, scl, 100.khz(), &mut rcc);
+
+        let write_buf = [0x00u8; 1];
+        let mut buffer = [0u8; 1];
+        const BMA400: u8 = 0b0010100;
+
+        let accel = bma400::Bma400::new(false);
+
+        accel.wake(&mut i2c);
+        accel.configure_inactivity_interupt(&mut i2c, 0x003F);
+
         // Return the initialised resources.
         init::LateResources {
-            LED: led,
-            INT: exti,
-            BUTTON: button,
+            EXTI: exti,
             SX1276_DIO0: sx1276_dio0,
+            BMA400_INT1: accel_int1,
             DEBUG_UART: tx,
             GPS_TX: gps_tx,
             GPS_RX: gps_rx,
+            I2C: i2c,
+            ACCEL: accel,
+            GPS_EN: gps_ldo_en,
         }
     }
+
+    #[task(capacity = 4, priority = 1, resources = [DEBUG_UART, I2C, ACCEL, GPS_EN])]
+    fn accel_activity(){
+        let int_status = resources.ACCEL.get_int_status(resources.I2C).unwrap();
+
+        if int_status == 0 {
+            write!(resources.DEBUG_UART, "Moving\r\n");
+            resources.GPS_EN.set_high();
+        } else {
+            write!(resources.DEBUG_UART, "Idle\r\n");
+            resources.GPS_EN.set_low();
+        }
+    }                
+
+
 
     #[task(capacity = 4, priority = 1, resources = [DEBUG_UART, BUFFER])]
     fn radio_event(event: RfEvent){
@@ -161,9 +195,7 @@ const APP: () = {
                 write!(resources.DEBUG_UART, "  Snr    =  {}\r\n", rx_packet.snr).unwrap();
                 unsafe {
                     for i in 0..rx_packet.len {
-                        
                             write!(resources.DEBUG_UART, "{:X} ", *rx_packet.buf.offset(i as isize)).unwrap();
-                        
                     }
                     write!(resources.DEBUG_UART, "\r\n").unwrap();
                 }
@@ -196,25 +228,25 @@ const APP: () = {
         }
     }
 
-    #[interrupt(priority = 2, resources = [LED, INT, BUTTON], spawn = [send_ping])]
-    fn EXTI2_3() {
-        static mut STATE: bool = false;
-        // Clear the interrupt flag.
-        resources.INT.clear_irq(resources.BUTTON.i);
-        if *STATE {
-           resources.LED.set_low().unwrap();
-           *STATE = false;
-        } else {
-            resources.LED.set_high().unwrap();
-           *STATE = true;
+    #[interrupt(priority = 2, resources = [SX1276_DIO0, EXTI], spawn = [radio_event, echo])]
+    fn EXTI4_15() {
+        let reg = resources.EXTI.get_pending_irq();
+
+        if exti::line_is_triggered(reg, resources.SX1276_DIO0.i) {
+            resources.EXTI.clear_irq(resources.SX1276_DIO0.i);
+            spawn.radio_event(RfEvent::DIO0); 
         }
-        spawn.send_ping();
+
     }
 
-    #[interrupt(priority = 2, resources = [SX1276_DIO0, INT], spawn = [radio_event])]
-    fn EXTI4_15() {
-        resources.INT.clear_irq(resources.SX1276_DIO0.i);
-        spawn.radio_event(RfEvent::DIO0); 
+    #[interrupt(priority = 2, resources = [BMA400_INT1, EXTI], spawn = [accel_activity])]
+    fn EXTI0_1() {
+        let reg = resources.EXTI.get_pending_irq();
+
+        if exti::line_is_triggered(reg, resources.BMA400_INT1.i) {
+            resources.EXTI.clear_irq(resources.BMA400_INT1.i);
+            spawn.accel_activity();
+        }  
     }
 
     // Interrupt handlers used to dispatch software tasks

@@ -10,7 +10,7 @@ version = "0.1.0"
 features = ["stm32l0x2", "rt"]
 
 [dependencies]
-embedded-hal = { version = "0.2.2", features = ["unproven"] }
+embedded-hal = { version = "0.2.3", features = ["unproven"] }
 cortex-m = {version = "0.5.8", features = ["const-fn"] }
 cortex-m-rt = "0.6.7"
 cortex-m-semihosting = "0.3.2"
@@ -19,6 +19,7 @@ void = { version = "1.0.2", default-features = false }
 cast = { version = "0.2.2", default-features = false }
 nb = "0.1.2"
 panic-halt = "0.2.0"
+enum_primitive = {version = "*", git = "https://github.com/lthiery/enum_primitive-rs.git" }
 
 
 [dependencies.stm32l0]
@@ -29,6 +30,10 @@ features = ["rt", "stm32l0x2"]
 panic-halt = "0.2.0"
 panic-semihosting = "0.5.1"
 
+[dependencies.num-traits]
+version = "0.2"
+default-features = false
+
 
 [dependencies.sx1276]
 git                     = "https://github.com/lthiery/sx1276-rs.git"
@@ -37,6 +42,6 @@ branch					= "working-code"
 
 [dependencies.stm32l0xx-hal]
 git                     = "https://github.com/lthiery/stm32l0xx-hal.git"
-branch					= "serial-async"
+branch					= "i2c-test"
 features                = ["stm32l0x2","rt"]
 

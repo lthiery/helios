@@ -200,8 +200,6 @@ const APP: () = {
         }
     }                
 
-
-
     #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, BUFFER])]
     fn radio_event(event: RfEvent){
         let client_event = LongFi::handle_event(event);

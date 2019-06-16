@@ -13,11 +13,10 @@ use core::fmt::Write;
 use hal::{exti, exti::TriggerEdge, gpio::*, pac, prelude::*, rcc::Config, spi, serial};
 use stm32l0;
 
-
-
 #[macro_use] extern crate enum_primitive;
 
 mod bma400;
+mod ubx;
 
 use embedded_hal::digital::v2::OutputPin;
 
@@ -129,8 +128,34 @@ const APP: () = {
 
         let (mut gps_tx, mut gps_rx) = serial.split();
         
-        write!(gps_tx, "$PMTK314,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0*28\r\n").unwrap();
-        write!(gps_tx, "$PMTK220,1000*1F\r\n").unwrap();
+        //                  HEADER1       HEADER2           CLASS              ID   
+        let mut set_ubx = [ubx::SYNC_1, ubx::SYNC_2, ubx::ClassId::Cfg as u8, 0x00, 
+            20, 0x00,                   // length 
+            0x01,                       // port ID
+            0x00,                       // reserved
+            0x00, 0x00,                 // tx ready
+            0xD0, 0x08, 0x00, 0x00,     // MODE (8 bit len, no parity, 1 stop bit)
+            0x80, 0x25, 0x00, 0x00,     // BAUD (9600)
+            0x1, 0x00,                  // inProtoMask (UBX only) 
+            0x1, 0x00,                  // outProtoMask (UBX only) 
+            0x00, 0x00, 0x00, 0x00,     // reserved
+            0x00, 0x00,                 // checksum bytes
+        ];
+
+        ubx::set_checksum(&mut set_ubx);
+
+        for byte in set_ubx.iter() {
+            gps_tx.write(*byte);
+        }
+
+        let mut get_cfg = [ubx::SYNC_1, ubx::SYNC_2, ubx::ClassId::Cfg as u8, 0x00, 
+            0,
+            0x00, 0x00,                
+        ];
+        ubx::set_checksum(&mut get_cfg);
+        for byte in get_cfg.iter() {
+            gps_tx.write(*byte);
+        }
 
         let sda = gpiob.pb9.into_open_drain_output();
         let scl = gpiob.pb8.into_open_drain_output();
@@ -162,22 +187,22 @@ const APP: () = {
         }
     }
 
-    #[task(capacity = 4, priority = 1, resources = [DEBUG_UART, I2C, ACCEL, GPS_EN])]
+    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, I2C, ACCEL, GPS_EN])]
     fn accel_activity(){
         let int_status = resources.ACCEL.get_int_status(resources.I2C).unwrap();
 
         if int_status == 0 {
             write!(resources.DEBUG_UART, "Moving\r\n");
-            resources.GPS_EN.set_high();
+            //resources.GPS_EN.set_high();
         } else {
             write!(resources.DEBUG_UART, "Idle\r\n");
-            resources.GPS_EN.set_low();
+            //resources.GPS_EN.set_low();
         }
     }                
 
 
 
-    #[task(capacity = 4, priority = 1, resources = [DEBUG_UART, BUFFER])]
+    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, BUFFER])]
     fn radio_event(event: RfEvent){
         let client_event = LongFi::handle_event(event);
         
@@ -208,7 +233,7 @@ const APP: () = {
         }
     }
 
-    #[task(capacity = 4, priority = 1, resources = [DEBUG_UART, COUNT])]
+    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, COUNT])]
     fn send_ping(){
         write!(resources.DEBUG_UART, "Sending Ping\r\n").unwrap();
         let packet: [u8; 5] = [0xDE, 0xAD, 0xBE, 0xEF, *resources.COUNT];
@@ -216,19 +241,18 @@ const APP: () = {
         LongFi::send(&packet, packet.len());
     }
 
-    #[task(capacity = 8, priority = 1, resources = [DEBUG_UART])]
-    fn echo(byte: u8) {
-        resources.DEBUG_UART.write(byte);
+    #[task(capacity = 8, priority = 2)]
+    fn ubx_parse(byte: u8) {
     }
 
-    #[interrupt(priority = 2, resources = [GPS_RX], spawn = [echo])]
+    #[interrupt(priority = 3, resources = [GPS_RX], spawn = [ubx_parse])]
     fn USART1() {
         if let Ok(byte) = resources.GPS_RX.read() {
-            spawn.echo(byte);
+            spawn.ubx_parse(byte);
         }
     }
 
-    #[interrupt(priority = 2, resources = [SX1276_DIO0, EXTI], spawn = [radio_event, echo])]
+    #[interrupt(priority = 3, resources = [SX1276_DIO0, EXTI], spawn = [radio_event])]
     fn EXTI4_15() {
         let reg = resources.EXTI.get_pending_irq();
 
@@ -239,7 +263,7 @@ const APP: () = {
 
     }
 
-    #[interrupt(priority = 2, resources = [BMA400_INT1, EXTI], spawn = [accel_activity])]
+    #[interrupt(priority = 3, resources = [BMA400_INT1, EXTI], spawn = [accel_activity])]
     fn EXTI0_1() {
         let reg = resources.EXTI.get_pending_irq();
 

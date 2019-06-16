@@ -3,8 +3,8 @@ use heapless::{consts::U128, Vec};
 pub const SYNC_1: u8 = 0xB5;
 pub const SYNC_2: u8 = 0x62;
 
-const LEN_HEADER = 4; 	// num of bytes in header minus the sync chars
-const LEN_CHECKSUM = 2; // number of checksum bytes
+const LEN_HEADER: u16 = 4; 	// num of bytes in header minus the sync chars
+const LEN_CHECKSUM: u16 = 2; // number of checksum bytes
 
 
 pub struct Ubx {
@@ -12,7 +12,7 @@ pub struct Ubx {
     prev_byte: u8,
     in_msg: bool,
     payload_len: u16,
-    count: u8,
+    count: u16,
 }
 
 impl Ubx {
@@ -26,7 +26,7 @@ impl Ubx {
 		}
 	}
 
-	pub fn push(&mut self, byte: u8){
+	pub fn push(&mut self, byte: u8) {
 
 		if self.in_msg {
 			self.buffer.push(byte);
@@ -39,7 +39,7 @@ impl Ubx {
 			}
 
 			// msg is over
-			if count - LEN_HEADER == payload_len + LEN_CHECKSUM {
+			if self.count - LEN_HEADER == self.payload_len + LEN_CHECKSUM {
 				
 			}
 

@@ -33,6 +33,7 @@ const APP: () = {
     static mut GPS_RX: serial::Rx<stm32l0::stm32l0x2::USART1> = ();
     static mut I2C: stm32l0xx_hal::i2c::I2c<stm32l0::stm32l0x2::I2C1, stm32l0xx_hal::gpio::gpiob::PB9<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::OpenDrain>>, stm32l0xx_hal::gpio::gpiob::PB8<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::OpenDrain>>> = ();
     static mut ACCEL: bma400::Bma400 = ();
+    static mut UBX: ubx::Ubx = ();
 
     #[init(resources = [BUFFER])]
     fn init() -> init::LateResources {
@@ -184,6 +185,7 @@ const APP: () = {
             I2C: i2c,
             ACCEL: accel,
             GPS_EN: gps_ldo_en,
+            UBX: ubx::Ubx::new(),
         }
     }
 
@@ -241,6 +243,7 @@ const APP: () = {
 
     #[task(capacity = 8, priority = 2)]
     fn ubx_parse(byte: u8) {
+
     }
 
     #[interrupt(priority = 3, resources = [GPS_RX], spawn = [ubx_parse])]

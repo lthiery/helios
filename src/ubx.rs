@@ -8,11 +8,11 @@ const LEN_CHECKSUM: u16 = 2; // number of checksum bytes
 
 
 pub struct Ubx {
-	buffer: Vec<u8, U128>,
-    prev_byte: u8,
-    in_msg: bool,
-    payload_len: u16,
-    count: u16,
+	pub buffer: Vec<u8, U128>,
+    pub prev_byte: u8,
+    pub in_msg: bool,
+    pub payload_len: u16,
+    pub count: u16,
 }
 
 impl Ubx {
@@ -26,7 +26,7 @@ impl Ubx {
 		}
 	}
 
-	pub fn push(&mut self, byte: u8) {
+	pub fn push(&mut self, byte: u8) -> (bool, u16) {
 
 		if self.in_msg {
 			self.buffer.push(byte);
@@ -38,10 +38,17 @@ impl Ubx {
 				self.payload_len |= (byte as u16) <<8;
 			}
 
-			// msg is over
-			if self.count - LEN_HEADER == self.payload_len + LEN_CHECKSUM {
-				
+			if self.count >= 4 {
+				// msg is over
+				if self.count - LEN_HEADER == self.payload_len + LEN_CHECKSUM {
+					let ret_count = self.count;
+					self.in_msg = false;
+					self.count = 0;
+					self.payload_len = 0;
+					return (true, ret_count);
+				} 
 			}
+			
 
         } else {
             // the beginning of a msg has started
@@ -52,6 +59,7 @@ impl Ubx {
             	self.prev_byte = byte;
             }
         }
+        (false, 0)
 	}
 }
 

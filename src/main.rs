@@ -13,6 +13,9 @@ use core::fmt::Write;
 use hal::{exti, exti::TriggerEdge, gpio::*, pac, prelude::*, rcc::Config, spi, serial};
 use stm32l0;
 
+#[macro_use] extern crate nb;
+use nb::block;
+
 #[macro_use] extern crate enum_primitive;
 
 mod bma400;
@@ -63,6 +66,11 @@ const APP: () = {
         let mut gps_ldo_en = gpiob.pb2.into_push_pull_output();
 
         gps_ldo_en.set_high();
+
+
+        let mut gps_enable = gpioa.pa5.into_push_pull_output();
+
+        gps_enable.set_low();
        
         let exti = device.EXTI;
 
@@ -126,37 +134,31 @@ const APP: () = {
             .unwrap();
 
         serial.listen(serial::Event::Rxne);
-
+        gps_enable.set_high();
         let (mut gps_tx, mut gps_rx) = serial.split();
-        
-        //                  HEADER1       HEADER2           CLASS              ID   
-        let mut set_ubx = [ubx::SYNC_1, ubx::SYNC_2, ubx::ClassId::Cfg as u8, 0x00, 
-            20, 0x00,                   // length 
-            0x01,                       // port ID
-            0x00,                       // reserved
-            0x00, 0x00,                 // tx ready
-            0xD0, 0x08, 0x00, 0x00,     // MODE (8 bit len, no parity, 1 stop bit)
-            0x80, 0x25, 0x00, 0x00,     // BAUD (9600)
-            0x1, 0x00,                  // inProtoMask (UBX only) 
-            0x1, 0x00,                  // outProtoMask (UBX only) 
-            0x00, 0x00, 0x00, 0x00,     // reserved
-            0x00, 0x00,                 // checksum bytes
-        ];
 
-        ubx::set_checksum(&mut set_ubx);
+        delay.delay_ms(1000_u16);
 
-        for byte in set_ubx.iter() {
-            gps_tx.write(*byte);
-        }
 
-        let mut get_cfg = [ubx::SYNC_1, ubx::SYNC_2, ubx::ClassId::Cfg as u8, 0x00, 
-            0,
-            0x00, 0x00,                
-        ];
-        ubx::set_checksum(&mut get_cfg);
-        for byte in get_cfg.iter() {
-            gps_tx.write(*byte);
-        }
+
+
+        //write!(tx, "\r\n").unwrap();
+
+
+        delay.delay_ms(200_u16);
+
+        // let mut get_cfg = [ubx::SYNC_1, ubx::SYNC_2, ubx::ClassId::Cfg as u8, 0x00, 
+        //     0,
+        //     0x00, 0x00,                
+        // ];
+        // ubx::set_checksum(&mut get_cfg);
+
+        // for byte in get_cfg.iter() {
+        //     gps_tx.write(*byte);
+        //     write!(tx, "{:x} ", *byte).unwrap();
+        // }
+        // write!(tx, "\r\n").unwrap();
+
 
         let sda = gpiob.pb9.into_open_drain_output();
         let scl = gpiob.pb8.into_open_drain_output();
@@ -173,6 +175,69 @@ const APP: () = {
 
         accel.wake(&mut i2c);
         accel.configure_inactivity_interupt(&mut i2c, 0x003F);
+
+        //                  HEADER1       HEADER2           CLASS              ID   
+        let mut set_ubx = [ubx::SYNC_1, ubx::SYNC_2, ubx::ClassId::Cfg as u8, 0x00, 
+            20, 0x00,                   // length 
+            0x01,                       // port ID
+            0x00,                       // reserved
+            0x00, 0x00,                 // tx ready
+            0xD0, 0x08, 0x00, 0x00,     // MODE (8 bit len, no parity, 1 stop bit)
+            0x80, 0x25, 0x00, 0x00,     // BAUD (9600)
+            0b01, 0x00,                 // inProtoMask (UBX only) 
+            0b01, 0x00,                 // outProtoMask (UBX only) 
+            0x00, 0x00, 0x00, 0x00,     // reserved
+            0x00, 0x00,                 // checksum bytes
+        ];
+
+        ubx::set_checksum(&mut set_ubx);
+
+        for byte in set_ubx.iter() {
+            block!(gps_tx.write(*byte));
+        }
+
+        delay.delay_ms(50_u16);
+
+        //                  HEADER1       HEADER2           CLASS              ID   
+        let mut set_ubx = [ubx::SYNC_1, ubx::SYNC_2, ubx::ClassId::Cfg as u8, 0x00, 
+            20, 0x00,                   // length 
+            0x01,                       // port ID
+            0x00,                       // reserved
+            0x00, 0x00,                 // tx ready
+            0xD0, 0x08, 0x00, 0x00,     // MODE (8 bit len, no parity, 1 stop bit)
+            0x80, 0x25, 0x00, 0x00,     // BAUD (9600)
+            0b01, 0x00,                  // inProtoMask (UBX only) 
+            0b01, 0x00,                  // outProtoMask (UBX only) 
+            0x00, 0x00, 0x00, 0x00,     // reserved
+            0x00, 0x00,                 // checksum bytes
+        ];
+
+        ubx::set_checksum(&mut set_ubx);
+
+        for byte in set_ubx.iter() {
+            block!(gps_tx.write(*byte));
+        }
+
+        delay.delay_ms(50_u16);
+
+        //       HEADER1       HEADER2                  CLASS              ID   
+        let mut enable_nav = [ubx::SYNC_1, ubx::SYNC_2, ubx::ClassId::Cfg as u8, 0x01, 
+            8, 0x00,                    // length 
+            ubx::ClassId::Nav as u8, 0x07, 
+            0x00, // port 0
+            0x01, // port 1
+            0x00, // port 2
+            0x00, // port 3
+            0x00, // port 4
+            0x00, // port 5
+            0x00, 0x00,                 // checksum bytes
+        ];
+
+        ubx::set_checksum(&mut enable_nav);
+
+        for byte in enable_nav.iter() {
+            block!(gps_tx.write(*byte));
+        }
 
         // Return the initialised resources.
         init::LateResources {
@@ -233,7 +298,7 @@ const APP: () = {
         }
     }
 
-    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, COUNT])]
+    #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, COUNT])]
     fn send_ping(){
         write!(resources.DEBUG_UART, "Sending Ping\r\n").unwrap();
         let packet: [u8; 5] = [0xDE, 0xAD, 0xBE, 0xEF, *resources.COUNT];
@@ -241,9 +306,63 @@ const APP: () = {
         LongFi::send(&packet, packet.len());
     }
 
-    #[task(capacity = 8, priority = 2)]
+    #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, UBX])]
     fn ubx_parse(byte: u8) {
+        //resources.DEBUG_UART.write(byte);
+        //write!(resources.DEBUG_UART, "{:x} ", byte).unwrap();
 
+
+        let (complete_msg, length) = resources.UBX.push(byte);
+
+        if complete_msg {
+            // for byte in resources.UBX.buffer.iter(){
+            //     write!(resources.DEBUG_UART, "{:x} ", *byte).unwrap();
+            // }
+            if length>12 {
+                let fix_type = resources.UBX.buffer[24];
+
+                if fix_type > 0 {
+                    write!(resources.DEBUG_UART, "Year: {} \r\n", 
+                        (resources.UBX.buffer[8] as u16) | ((resources.UBX.buffer[9] as u16) << 8) ).unwrap();
+                    write!(resources.DEBUG_UART, "Month: {}\r\n", 
+                        resources.UBX.buffer[10] ).unwrap();
+                    write!(resources.DEBUG_UART, "Day: {}\r\n", 
+                        resources.UBX.buffer[11] ).unwrap();
+                    write!(resources.DEBUG_UART, "{}:{}:{}\r\n", 
+                        resources.UBX.buffer[12], resources.UBX.buffer[13], resources.UBX.buffer[14]).unwrap();
+                } 
+                if fix_type < 5 && fix_type > 2 {
+                    let lon_bytes = [
+                        resources.UBX.buffer[28],
+                        resources.UBX.buffer[29],
+                        resources.UBX.buffer[30],
+                        resources.UBX.buffer[31],
+                    ];
+
+                    let lon = unsafe { 
+                         core::mem::transmute::<[u8; 4], f32>(lon_bytes)
+                    };
+                    write!(resources.DEBUG_UART, "{}\r\n", lon).unwrap();
+
+                    let lat_bytes = [
+                        resources.UBX.buffer[32],
+                        resources.UBX.buffer[33],
+                        resources.UBX.buffer[34],
+                        resources.UBX.buffer[35],
+                    ];
+
+                    let lat = unsafe { 
+                         core::mem::transmute::<[u8; 4], f32>(lat_bytes)
+                    };
+                    write!(resources.DEBUG_UART, "{}\r\n", lat).unwrap();
+                }
+            
+                
+                resources.UBX.buffer.clear();
+                write!(resources.DEBUG_UART, "End of Message\r\n").unwrap();
+            }
+
+        }
     }
 
     #[interrupt(priority = 3, resources = [GPS_RX], spawn = [ubx_parse])]
@@ -253,26 +372,26 @@ const APP: () = {
         }
     }
 
-    #[interrupt(priority = 3, resources = [SX1276_DIO0, EXTI], spawn = [radio_event])]
-    fn EXTI4_15() {
-        let reg = resources.EXTI.get_pending_irq();
+    // #[interrupt(priority = 3, resources = [SX1276_DIO0, EXTI], spawn = [radio_event])]
+    // fn EXTI4_15() {
+    //     let reg = resources.EXTI.get_pending_irq();
 
-        if exti::line_is_triggered(reg, resources.SX1276_DIO0.i) {
-            resources.EXTI.clear_irq(resources.SX1276_DIO0.i);
-            spawn.radio_event(RfEvent::DIO0); 
-        }
+    //     if exti::line_is_triggered(reg, resources.SX1276_DIO0.i) {
+    //         resources.EXTI.clear_irq(resources.SX1276_DIO0.i);
+    //         spawn.radio_event(RfEvent::DIO0); 
+    //     }
 
-    }
+    // }
 
-    #[interrupt(priority = 3, resources = [BMA400_INT1, EXTI], spawn = [accel_activity])]
-    fn EXTI0_1() {
-        let reg = resources.EXTI.get_pending_irq();
+    // #[interrupt(priority = 3, resources = [BMA400_INT1, EXTI], spawn = [accel_activity])]
+    // fn EXTI0_1() {
+    //     let reg = resources.EXTI.get_pending_irq();
 
-        if exti::line_is_triggered(reg, resources.BMA400_INT1.i) {
-            resources.EXTI.clear_irq(resources.BMA400_INT1.i);
-            spawn.accel_activity();
-        }  
-    }
+    //     if exti::line_is_triggered(reg, resources.BMA400_INT1.i) {
+    //         resources.EXTI.clear_irq(resources.BMA400_INT1.i);
+    //         spawn.accel_activity();
+    //     }  
+    // }
 
     // Interrupt handlers used to dispatch software tasks
     extern "C" {
@@ -286,7 +405,6 @@ use stm32l0xx_hal::gpio::{Floating, Input, PushPull};
 
 use embedded_hal::spi::FullDuplex;
 use core::ffi; 
-use nb::block;
 
 use stm32l0xx_hal::pac::SPI1;
 

@@ -355,7 +355,11 @@ const APP: () = {
                         resources.UBX.buffer[11] ).unwrap();
                     write!(resources.DEBUG_UART, "{}:{}:{}\r\n", 
                         resources.UBX.buffer[12], resources.UBX.buffer[13], resources.UBX.buffer[14]).unwrap();
-                } 
+                }
+
+                let num_sats = resources.UBX.buffer[27];
+                write!(resources.DEBUG_UART, "Num Sats {}\t", num_sats).unwrap(); 
+
                 if fix_type < 5 && fix_type > 2 {
                     let lon_bytes = [
                         resources.UBX.buffer[28],
@@ -405,12 +409,25 @@ const APP: () = {
                     let speed = unsafe { 
                          core::mem::transmute::<[u8; 4], u32>(speed_bytes)
                     };
-                    write!(resources.DEBUG_UART, "Speed {} mm/s\r\n", alt).unwrap();
+                    write!(resources.DEBUG_UART, "Speed {} ", alt).unwrap();
+
+                    let speed_acc_bytes = [
+                        resources.UBX.buffer[72],
+                        resources.UBX.buffer[73],
+                        resources.UBX.buffer[74],
+                        resources.UBX.buffer[75],
+                    ];
+
+                    let speed_acc = unsafe { 
+                         core::mem::transmute::<[u8; 4], u32>(speed_acc_bytes)
+                    };
+                    write!(resources.DEBUG_UART, "+/- {} mm/s", speed_acc).unwrap();
+
                 }
             
                 
                 resources.UBX.buffer.clear();
-                write!(resources.DEBUG_UART, "End of Message\r\n").unwrap();
+                write!(resources.DEBUG_UART, "\r\nEnd of Message\r\n").unwrap();
             }
 
         }

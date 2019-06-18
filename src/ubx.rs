@@ -41,8 +41,8 @@ pub struct NavPvt {
 	num_sats: u8,
 	lat: i32,
 	lon: i32,
-	alt: u32,
-	speed: u32, 
+	alt: i32,
+	speed: i32, 
 }
 
 impl core::fmt::Display for NavPvt {
@@ -54,8 +54,8 @@ impl core::fmt::Display for NavPvt {
         	self.secs,
         	self.day, self.month, self.year,
         	self.num_sats,
-        	self.lat,
-        	self.lon,
+        	(self.lat as f64)/10000000.0,
+        	(self.lon as f64)/10000000.0,
         	self.alt,
         	self.speed)
     }
@@ -75,8 +75,8 @@ impl NavPvt {
 
 		let lon = unsafe { core::mem::transmute::<[u8; 4], i32>([buf[28], buf[29], buf[30], buf[31]])};
 		let lat = unsafe { core::mem::transmute::<[u8; 4], i32>([buf[32], buf[33], buf[34], buf[35]])};
-		let alt = unsafe { core::mem::transmute::<[u8; 4], u32>([buf[40], buf[41], buf[42], buf[43]])};
-		let speed = unsafe { core::mem::transmute::<[u8; 4], u32>([buf[64],	buf[65], buf[66], buf[67]])};
+		let alt = unsafe { core::mem::transmute::<[u8; 4], i32>([buf[40], buf[41], buf[42], buf[43]])};
+		let speed = unsafe { core::mem::transmute::<[u8; 4], i32>([buf[64],	buf[65], buf[66], buf[67]])};
 
 		NavPvt {
 			fix_type,

@@ -239,6 +239,22 @@ const APP: () = {
             block!(gps_tx.write(*byte));
         }
 
+
+       let mut enable_ext_ant = [
+            0xb5, 0x62,                                     /* SYNC_CHAR_1, SYNC_CHAR_2  */
+            0x06, 0x13,                                     /* CLASS, ID                 */
+            0x04, 0x00,                                     /* LENGTH                    */
+            0x00, 0x00,                                     /* FLAGS                     */
+            0xf0, 0xb9,                                     /* PINS                      */
+            0x00, 0x00,                                     /* CK_A, CK_B                */
+        ];
+
+        ubx::set_checksum(&mut enable_ext_ant);
+
+        for byte in enable_ext_ant.iter() {
+            block!(gps_tx.write(*byte));
+        }
+
         // Return the initialised resources.
         init::LateResources {
             EXTI: exti,

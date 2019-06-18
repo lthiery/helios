@@ -31,7 +31,6 @@ const APP: () = {
     static mut BMA400_INT1: gpioa::PA0<Input<Floating>> = ();
     static mut DEBUG_UART: serial::Tx<stm32l0::stm32l0x2::USART2> = ();
     static mut BUFFER: [u8; 512] = [0; 512];
-    static mut COUNT: u8 = 0;
     static mut GPS_EN: gpiob::PB2<Output<PushPull>> = ();
     static mut GPS_TX: serial::Tx<stm32l0::stm32l0x2::USART1> = ();
     static mut GPS_RX: serial::Rx<stm32l0::stm32l0x2::USART1> = ();
@@ -316,28 +315,33 @@ const APP: () = {
         }
     }
 
-    #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, COUNT])]
-    fn send_ping(){
-        /*
-        ID (1 byte)
-        Seq Num (2 bytes)
-        GPS Lat (4 bytes, degrees)
-        GPS Lon (4 bytes, degrees)
-        Alt (2 bytes)
-        Speed (2 bytes)
-        */
-        write!(resources.DEBUG_UART, "Sending Ping\r\n").unwrap();
-        let packet: [u8; 5] = [0xDE, 0xAD, 0xBE, 0xEF, *resources.COUNT];
-        *resources.COUNT+=1;
-        LongFi::send(&packet, packet.len());
-    }
-
     #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, UBX])]
     fn ubx_parse(byte: u8) {
+        static mut COUNT: u8 = 0;
+
         if let Some (msg) = resources.UBX.push(byte) {
             match msg {
                 Message::NP(navpvt) => {
                     write!(resources.DEBUG_UART, "{}\r\n", navpvt);
+                    let packet: [u8; 14] = [
+                        0xDE, 
+                        *COUNT,
+                        (navpvt.lat >> 24) as u8, 
+                        (navpvt.lat >> 16) as u8,
+                        (navpvt.lat >> 8) as u8,
+                        navpvt.lat as u8,
+                        (navpvt.lon >> 24) as u8, 
+                        (navpvt.lon >> 16) as u8,
+                        (navpvt.lon >> 8) as u8,
+                        navpvt.lon as u8,
+                        (navpvt.alt >> 8) as u8,
+                        navpvt.alt as u8,
+                        (navpvt.speed >> 8) as u8,
+                        navpvt.speed as u8,
+                    ];
+                    LongFi::send(&packet, packet.len());
+                    *COUNT+=1;
+
                 }
             }
         }

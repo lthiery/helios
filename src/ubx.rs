@@ -20,7 +20,7 @@ pub struct Ubx {
 
 enum_from_primitive! {
 #[derive(Debug, PartialEq)]
-enum FixType {
+pub enum FixType {
 	NoFix = 0,
 	DeadReckoningOnly = 1,
 	_2D= 2,
@@ -31,18 +31,18 @@ enum FixType {
 }
 
 pub struct NavPvt {
-	fix_type: FixType,
-	year: u16,
-	month: u8,
-	day: u8,
-	hour: u8,
-	mins: u8,
-	secs: u8,
-	num_sats: u8,
-	lat: i32,
-	lon: i32,
-	alt: i32,
-	speed: i32, 
+	pub fix_type: FixType,
+	pub year: u16,
+	pub month: u8,
+	pub day: u8,
+	pub hour: u8,
+	pub mins: u8,
+	pub secs: u8,
+	pub num_sats: u8,
+	pub lat: i32,
+	pub lon: i32,
+	pub alt: i32,
+	pub speed: i32, 
 }
 
 impl core::fmt::Display for NavPvt {
@@ -113,7 +113,6 @@ impl Ubx {
 	}
 
 	pub fn push(&mut self, byte: u8) -> Option<Message> {
-
 		if self.in_msg {
 			self.buffer.push(byte);
 			self.count+=1;

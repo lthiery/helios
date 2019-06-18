@@ -6,6 +6,9 @@ pub const SYNC_2: u8 = 0x62;
 const LEN_HEADER: u16 = 4; 	// num of bytes in header minus the sync chars
 const LEN_CHECKSUM: u16 = 2; // number of checksum bytes
 
+enum Message {
+	NavPvt
+}
 
 pub struct Ubx {
 	pub buffer: Vec<u8, U128>,
@@ -13,6 +16,67 @@ pub struct Ubx {
     pub in_msg: bool,
     pub payload_len: u16,
     pub count: u16,
+}
+
+enum_from_primitive! {
+#[derive(Debug, PartialEq)]
+enum FixType {
+	NoFix = 0,
+	DeadReckoningOnly = 1,
+	_2D= 2,
+	_3D= 3,
+	GNSSandDeadReckoning = 4,
+	TimeOnly = 5
+}
+}
+
+struct NavPvt {
+	fix_type: FixType,
+	year: u16,
+	month: u8,
+	day: u8,
+	hour: u8,
+	mins: u8,
+	secs: u8,
+	num_sats: u8,
+	lat: i32,
+	lon: i32,
+	alt: u32,
+	speed: u32, 
+}
+
+impl NavPvt {
+	fn new(buf: &[u8]) -> NavPvt{
+		let fix_type = FixType::from_u8(buf[24]).expect("Invalid fix_type value");
+
+		let year = (buf[8] as u16) | ((buf[9] as u16) << 8);
+		let month = buf[10];
+		let day = buf[11];
+		let hour = buf[12];
+		let mins = buf[13];
+		let secs = buf[14];
+		let num_sats = buf[27];
+
+		let lon = unsafe { core::mem::transmute::<[u8; 4], i32>([buf[28], buf[29], buf[30], buf[31]])};
+		let lat = unsafe { core::mem::transmute::<[u8; 4], i32>([buf[32], buf[33], buf[34], buf[35]])};
+		let alt = unsafe { core::mem::transmute::<[u8; 4], u32>([buf[40], buf[41], buf[42], buf[43]])};
+		let speed = unsafe { core::mem::transmute::<[u8; 4], u32>([buf[64],	buf[65], buf[66], buf[67]])};
+
+		NavPvt {
+			fix_type,
+			year,
+			month,
+			day,
+			hour,
+			mins,
+			secs,
+			num_sats,
+			lat,
+			lon,
+			alt,
+			speed, 
+		}
+	}
 }
 
 impl Ubx {
@@ -55,6 +119,11 @@ impl Ubx {
 					self.reset();
 
 					if ck_a == self.buffer[count as usize -2] && ck_b == self.buffer[count as usize -1] {
+
+						if self.buffer[0] == (ClassId::Nav as u8) && self.buffer[1] == 0x07 {
+
+						}
+
 						return (true, count);
 					} else {
 						self.buffer.clear();
@@ -98,6 +167,7 @@ pub fn set_checksum(buf: &mut [u8]){
 }
 
 use num_traits::cast::FromPrimitive;
+use num_traits::cast::ToPrimitive;
 
 enum_from_primitive! {
 #[derive(Debug, PartialEq)]

@@ -248,7 +248,7 @@ dependencies = [
 [[package]]
 name = "enum_primitive"
 version = "0.1.1"
-source = "git+https://github.com/lthiery/enum_primitive-rs.git#78f84d0c972bec1069e85033c4d1aa4b40780ddb"
+source = "git+https://github.com/lthiery/enum_primitive-rs.git#c020ff682709bdeb74a7ae887944fa532bc8b1a7"
 dependencies = [
  "num-traits 0.2.8 (registry+https://github.com/rust-lang/crates.io-index)",
 ]

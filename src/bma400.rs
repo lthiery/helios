@@ -68,6 +68,7 @@ impl Bma400 {
 }
 
 use num_traits::cast::FromPrimitive;
+use num_traits::cast::ToPrimitive;
 
 enum_from_primitive! {
 #[derive(Debug, PartialEq)]

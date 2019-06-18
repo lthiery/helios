@@ -385,7 +385,7 @@ const APP: () = {
                          core::mem::transmute::<[u8; 4], i32>(lat_bytes)
                     };
 
-                    write!(resources.DEBUG_UART, "Lat {}\t", (lat as f64)/10000000.0 ).unwrap();
+                    write!(resources.DEBUG_UART, "Lat {}\t\r\n", (lat as f64)/10000000.0 ).unwrap();
 
                     let alt_bytes = [
                         resources.UBX.buffer[44],
@@ -397,7 +397,7 @@ const APP: () = {
                     let alt = unsafe { 
                          core::mem::transmute::<[u8; 4], u32>(alt_bytes)
                     };
-                    write!(resources.DEBUG_UART, "Alt mm{}\t", alt).unwrap();
+                    write!(resources.DEBUG_UART, "Alt {} mm\t", alt).unwrap();
 
                     let speed_bytes = [
                         resources.UBX.buffer[60],
@@ -409,7 +409,7 @@ const APP: () = {
                     let speed = unsafe { 
                          core::mem::transmute::<[u8; 4], u32>(speed_bytes)
                     };
-                    write!(resources.DEBUG_UART, "Speed {} ", alt).unwrap();
+                    write!(resources.DEBUG_UART, "Speed {} ", speed).unwrap();
 
                     let speed_acc_bytes = [
                         resources.UBX.buffer[72],

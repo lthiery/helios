@@ -356,9 +356,9 @@ const APP: () = {
                     ];
 
                     let lon = unsafe { 
-                         core::mem::transmute::<[u8; 4], f32>(lon_bytes)
+                         core::mem::transmute::<[u8; 4], i32>(lon_bytes)
                     };
-                    write!(resources.DEBUG_UART, "{}\r\n", lon).unwrap();
+                    write!(resources.DEBUG_UART, "{}\r\n", (lon as f64)/10000000.0).unwrap();
 
                     let lat_bytes = [
                         resources.UBX.buffer[32],
@@ -368,9 +368,9 @@ const APP: () = {
                     ];
 
                     let lat = unsafe { 
-                         core::mem::transmute::<[u8; 4], f32>(lat_bytes)
+                         core::mem::transmute::<[u8; 4], i32>(lat_bytes)
                     };
-                    write!(resources.DEBUG_UART, "{}\r\n", lat).unwrap();
+                    write!(resources.DEBUG_UART, "{}\r\n", (lat as f64)/10000000.0 ).unwrap();
                 }
             
                 

@@ -68,9 +68,9 @@ const APP: () = {
         gps_ldo_en.set_high();
 
 
-        // let mut gps_enable = gpioa.pa5.into_push_pull_output();
+        let mut gps_enable = gpioa.pa5.into_push_pull_output();
 
-        // gps_enable.set_low();
+        gps_enable.set_low();
        
         let exti = device.EXTI;
 
@@ -134,7 +134,7 @@ const APP: () = {
             .unwrap();
 
         serial.listen(serial::Event::Rxne);
-        //gps_enable.set_high();
+        gps_enable.set_high();
         let (mut gps_tx, mut gps_rx) = serial.split();
 
         delay.delay_ms(1000_u16);
@@ -185,7 +185,7 @@ const APP: () = {
             0xD0, 0x08, 0x00, 0x00,     // MODE (8 bit len, no parity, 1 stop bit)
             0x80, 0x25, 0x00, 0x00,     // BAUD (9600)
             0b01, 0x00,                 // inProtoMask (UBX only) 
-            0b11, 0x00,                 // outProtoMask (UBX only) 
+            0b01, 0x00,                 // outProtoMask (UBX only) 
             0x00, 0x00, 0x00, 0x00,     // reserved
             0x00, 0x00,                 // checksum bytes
         ];
@@ -207,7 +207,7 @@ const APP: () = {
             0xD0, 0x08, 0x00, 0x00,     // MODE (8 bit len, no parity, 1 stop bit)
             0x80, 0x25, 0x00, 0x00,     // BAUD (9600)
             0b01, 0x00,                  // inProtoMask (UBX only) 
-            0b11, 0x00,                  // outProtoMask (UBX only) 
+            0b01, 0x00,                  // outProtoMask (UBX only) 
             0x00, 0x00, 0x00, 0x00,     // reserved
             0x00, 0x00,                 // checksum bytes
         ];
@@ -221,23 +221,23 @@ const APP: () = {
         delay.delay_ms(50_u16);
 
         //       HEADER1       HEADER2                  CLASS              ID   
-        // let mut enable_nav = [ubx::SYNC_1, ubx::SYNC_2, ubx::ClassId::Cfg as u8, 0x01, 
-        //     8, 0x00,                    // length 
-        //     ubx::ClassId::Nav as u8, 0x07, 
-        //     0x00, // port 0
-        //     0x01, // port 1
-        //     0x00, // port 2
-        //     0x00, // port 3
-        //     0x00, // port 4
-        //     0x00, // port 5
-        //     0x00, 0x00,                 // checksum bytes
-        // ];
+        let mut enable_nav = [ubx::SYNC_1, ubx::SYNC_2, ubx::ClassId::Cfg as u8, 0x01, 
+            8, 0x00,                    // length 
+            ubx::ClassId::Nav as u8, 0x07, 
+            0x00, // port 0
+            0x01, // port 1
+            0x00, // port 2
+            0x00, // port 3
+            0x00, // port 4
+            0x00, // port 5
+            0x00, 0x00,                 // checksum bytes
+        ];
 
-        // ubx::set_checksum(&mut enable_nav);
+        ubx::set_checksum(&mut enable_nav);
 
-        // for byte in enable_nav.iter() {
-        //     block!(gps_tx.write(*byte));
-        // }
+        for byte in enable_nav.iter() {
+            block!(gps_tx.write(*byte));
+        }
 
         // Return the initialised resources.
         init::LateResources {
@@ -309,7 +309,8 @@ const APP: () = {
     #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, UBX])]
     fn ubx_parse(byte: u8) {
         //resources.DEBUG_UART.write(byte);
-        write!(resources.DEBUG_UART, "{:x} ", byte).unwrap();
+        //write!(resources.DEBUG_UART, "{:x} ", byte).unwrap();
+
 
         let (complete_msg, length) = resources.UBX.push(byte);
 

@@ -6,8 +6,8 @@ pub const SYNC_2: u8 = 0x62;
 const LEN_HEADER: u16 = 4; 	// num of bytes in header minus the sync chars
 const LEN_CHECKSUM: u16 = 2; // number of checksum bytes
 
-enum Message {
-	NavPvt
+pub enum Message {
+	NP(NavPvt)
 }
 
 pub struct Ubx {
@@ -30,7 +30,7 @@ enum FixType {
 }
 }
 
-struct NavPvt {
+pub struct NavPvt {
 	fix_type: FixType,
 	year: u16,
 	month: u8,
@@ -43,6 +43,22 @@ struct NavPvt {
 	lon: i32,
 	alt: u32,
 	speed: u32, 
+}
+
+impl core::fmt::Display for NavPvt {
+
+	fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        write!(f, "{:>02}:{:>02}:{:>02}\t{}/{}/{}\r\nSats: {}, Lat: {}, Lon: {}, Alt: {}, Speed: {}\r\n", 
+        	self.hour, 
+        	self.mins,
+        	self.secs,
+        	self.day, self.month, self.year,
+        	self.num_sats,
+        	self.lat,
+        	self.lon,
+        	self.alt,
+        	self.speed)
+    }
 }
 
 impl NavPvt {
@@ -96,7 +112,7 @@ impl Ubx {
 		self.payload_len = 0;
 	}
 
-	pub fn push(&mut self, byte: u8) -> (bool, u16) {
+	pub fn push(&mut self, byte: u8) -> Option<Message> {
 
 		if self.in_msg {
 			self.buffer.push(byte);
@@ -119,12 +135,12 @@ impl Ubx {
 					self.reset();
 
 					if ck_a == self.buffer[count as usize -2] && ck_b == self.buffer[count as usize -1] {
-
+						let mut ret = None;
 						if self.buffer[0] == (ClassId::Nav as u8) && self.buffer[1] == 0x07 {
-
+							ret = Some(Message::NP(NavPvt::new(&self.buffer.as_ref())));
 						}
-
-						return (true, count);
+						self.buffer.clear();
+						return ret;
 					} else {
 						self.buffer.clear();
 					}
@@ -139,7 +155,7 @@ impl Ubx {
             	self.prev_byte = byte;
             }
         }
-        (false, 0)
+        None
 	}
 }
 

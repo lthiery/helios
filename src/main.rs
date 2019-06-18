@@ -22,6 +22,7 @@ mod bma400;
 mod ubx;
 
 use embedded_hal::digital::v2::OutputPin;
+use crate::ubx::Message;
 
 #[rtfm::app(device = stm32l0xx_hal::pac)]
 const APP: () = {
@@ -333,107 +334,12 @@ const APP: () = {
 
     #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, UBX])]
     fn ubx_parse(byte: u8) {
-        //resources.DEBUG_UART.write(byte);
-        //write!(resources.DEBUG_UART, "{:x} ", byte).unwrap();
-
-
-        let (complete_msg, length) = resources.UBX.push(byte);
-
-        if complete_msg {
-            // for byte in resources.UBX.buffer.iter(){
-            //     write!(resources.DEBUG_UART, "{:x} ", *byte).unwrap();
-            // }
-            if length>12 {
-                let fix_type = resources.UBX.buffer[24];
-
-                if fix_type > 0 {
-                    write!(resources.DEBUG_UART, "Year: {} \r\n", 
-                        (resources.UBX.buffer[8] as u16) | ((resources.UBX.buffer[9] as u16) << 8) ).unwrap();
-                    write!(resources.DEBUG_UART, "Month: {}\r\n", 
-                        resources.UBX.buffer[10] ).unwrap();
-                    write!(resources.DEBUG_UART, "Day: {}\r\n", 
-                        resources.UBX.buffer[11] ).unwrap();
-                    write!(resources.DEBUG_UART, "{}:{}:{}\r\n", 
-                        resources.UBX.buffer[12], resources.UBX.buffer[13], resources.UBX.buffer[14]).unwrap();
+        if let Some (msg) = resources.UBX.push(byte) {
+            match msg {
+                Message::NP(navpvt) => {
+                    write!(resources.DEBUG_UART, "{}\r\n", navpvt);
                 }
-
-                let num_sats = resources.UBX.buffer[27];
-                write!(resources.DEBUG_UART, "Num Sats {}\t", num_sats).unwrap(); 
-
-                if fix_type < 5 && fix_type > 2 {
-
-
-
-
-                    let lon_bytes = [
-                        resources.UBX.buffer[28],
-                        resources.UBX.buffer[29],
-                        resources.UBX.buffer[30],
-                        resources.UBX.buffer[31],
-                    ];
-
-                    let lon = unsafe { 
-                         core::mem::transmute::<[u8; 4], i32>(lon_bytes)
-                    };
-
-                    write!(resources.DEBUG_UART, "Lon {}\t", (lon as f64)/10000000.0).unwrap();
-
-                    let lat_bytes = [
-                        resources.UBX.buffer[32],
-                        resources.UBX.buffer[33],
-                        resources.UBX.buffer[34],
-                        resources.UBX.buffer[35],
-                    ];
-
-                    let lat = unsafe { 
-                         core::mem::transmute::<[u8; 4], i32>(lat_bytes)
-                    };
-
-                    write!(resources.DEBUG_UART, "Lat {}\t\r\n", (lat as f64)/10000000.0 ).unwrap();
-
-                    let alt_bytes = [
-                        resources.UBX.buffer[40],
-                        resources.UBX.buffer[41],
-                        resources.UBX.buffer[42],
-                        resources.UBX.buffer[43],
-                    ];
-
-                    let alt = unsafe { 
-                         core::mem::transmute::<[u8; 4], u32>(alt_bytes)
-                    };
-                    write!(resources.DEBUG_UART, "Alt {} mm\t", alt).unwrap();
-
-                    let speed_bytes = [
-                        resources.UBX.buffer[64],
-                        resources.UBX.buffer[65],
-                        resources.UBX.buffer[66],
-                        resources.UBX.buffer[67],
-                    ];
-
-                    let speed = unsafe { 
-                         core::mem::transmute::<[u8; 4], u32>(speed_bytes)
-                    };
-                    write!(resources.DEBUG_UART, "Speed {} ", speed).unwrap();
-
-                    let speed_acc_bytes = [
-                        resources.UBX.buffer[72],
-                        resources.UBX.buffer[73],
-                        resources.UBX.buffer[74],
-                        resources.UBX.buffer[75],
-                    ];
-
-                    let speed_acc = unsafe { 
-                         core::mem::transmute::<[u8; 4], u32>(speed_acc_bytes)
-                    };
-                    write!(resources.DEBUG_UART, "+/- {} mm/s", speed_acc).unwrap();
-
-                }
-            
-                
-                resources.UBX.buffer.clear();
-                write!(resources.DEBUG_UART, "\r\nEnd of Message\r\n").unwrap();
             }
-
         }
     }
 

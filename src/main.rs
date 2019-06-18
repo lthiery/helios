@@ -239,10 +239,11 @@ const APP: () = {
             block!(gps_tx.write(*byte));
         }
 
+        delay.delay_ms(50_u16);
 
        let mut enable_ext_ant = [
-            0xb5, 0x62,                                     /* SYNC_CHAR_1, SYNC_CHAR_2  */
-            0x06, 0x13,                                     /* CLASS, ID                 */
+            ubx::SYNC_1, ubx::SYNC_2,         
+            ubx::Cfg, 0x13,                                 /* CLASS, ID                 */
             0x04, 0x00,                                     /* LENGTH                    */
             0x00, 0x00,                                     /* FLAGS                     */
             0xf0, 0xb9,                                     /* PINS                      */
@@ -316,6 +317,14 @@ const APP: () = {
 
     #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, COUNT])]
     fn send_ping(){
+        /*
+        ID (1 byte)
+        Seq Num (2 bytes)
+        GPS Lat (4 bytes, degrees)
+        GPS Lon (4 bytes, degrees)
+        Alt (2 bytes)
+        Speed (2 bytes)
+        */
         write!(resources.DEBUG_UART, "Sending Ping\r\n").unwrap();
         let packet: [u8; 5] = [0xDE, 0xAD, 0xBE, 0xEF, *resources.COUNT];
         *resources.COUNT+=1;
@@ -358,7 +367,7 @@ const APP: () = {
                     let lon = unsafe { 
                          core::mem::transmute::<[u8; 4], f32>(lon_bytes)
                     };
-                    write!(resources.DEBUG_UART, "{}\r\n", lon).unwrap();
+                    write!(resources.DEBUG_UART, "Lon {}\t", lon).unwrap();
 
                     let lat_bytes = [
                         resources.UBX.buffer[32],
@@ -370,7 +379,31 @@ const APP: () = {
                     let lat = unsafe { 
                          core::mem::transmute::<[u8; 4], f32>(lat_bytes)
                     };
-                    write!(resources.DEBUG_UART, "{}\r\n", lat).unwrap();
+                    write!(resources.DEBUG_UART, "Lat {}\t", lat).unwrap();
+
+                    let alt_bytes = [
+                        resources.UBX.buffer[44],
+                        resources.UBX.buffer[45],
+                        resources.UBX.buffer[46],
+                        resources.UBX.buffer[47],
+                    ];
+
+                    let alt = unsafe { 
+                         core::mem::transmute::<[u8; 4], u32>(alt_bytes)
+                    };
+                    write!(resources.DEBUG_UART, "Alt mm{}\t", alt).unwrap();
+
+                    let speed_bytes = [
+                        resources.UBX.buffer[60],
+                        resources.UBX.buffer[61],
+                        resources.UBX.buffer[62],
+                        resources.UBX.buffer[63],
+                    ];
+
+                    let speed = unsafe { 
+                         core::mem::transmute::<[u8; 4], u32>(speed_bytes)
+                    };
+                    write!(resources.DEBUG_UART, "Speed {} mm/s\t", alt).unwrap();
                 }
             
                 
@@ -388,26 +421,26 @@ const APP: () = {
         }
     }
 
-    // #[interrupt(priority = 3, resources = [SX1276_DIO0, EXTI], spawn = [radio_event])]
-    // fn EXTI4_15() {
-    //     let reg = resources.EXTI.get_pending_irq();
+    #[interrupt(priority = 3, resources = [SX1276_DIO0, EXTI], spawn = [radio_event])]
+    fn EXTI4_15() {
+        let reg = resources.EXTI.get_pending_irq();
 
-    //     if exti::line_is_triggered(reg, resources.SX1276_DIO0.i) {
-    //         resources.EXTI.clear_irq(resources.SX1276_DIO0.i);
-    //         spawn.radio_event(RfEvent::DIO0); 
-    //     }
+        if exti::line_is_triggered(reg, resources.SX1276_DIO0.i) {
+            resources.EXTI.clear_irq(resources.SX1276_DIO0.i);
+            spawn.radio_event(RfEvent::DIO0); 
+        }
 
-    // }
+    }
 
-    // #[interrupt(priority = 3, resources = [BMA400_INT1, EXTI], spawn = [accel_activity])]
-    // fn EXTI0_1() {
-    //     let reg = resources.EXTI.get_pending_irq();
+    #[interrupt(priority = 3, resources = [BMA400_INT1, EXTI], spawn = [accel_activity])]
+    fn EXTI0_1() {
+        let reg = resources.EXTI.get_pending_irq();
 
-    //     if exti::line_is_triggered(reg, resources.BMA400_INT1.i) {
-    //         resources.EXTI.clear_irq(resources.BMA400_INT1.i);
-    //         spawn.accel_activity();
-    //     }  
-    // }
+        if exti::line_is_triggered(reg, resources.BMA400_INT1.i) {
+            resources.EXTI.clear_irq(resources.BMA400_INT1.i);
+            spawn.accel_activity();
+        }  
+    }
 
     // Interrupt handlers used to dispatch software tasks
     extern "C" {

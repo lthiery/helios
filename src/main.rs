@@ -243,7 +243,7 @@ const APP: () = {
 
        let mut enable_ext_ant = [
             ubx::SYNC_1, ubx::SYNC_2,         
-            ubx::Cfg, 0x13,                                 /* CLASS, ID                 */
+            ubx::ClassId::Cfg as u8, 0x13,                           /* CLASS, ID                 */
             0x04, 0x00,                                     /* LENGTH                    */
             0x00, 0x00,                                     /* FLAGS                     */
             0xf0, 0xb9,                                     /* PINS                      */
@@ -365,9 +365,10 @@ const APP: () = {
                     ];
 
                     let lon = unsafe { 
-                         core::mem::transmute::<[u8; 4], f32>(lon_bytes)
+                         core::mem::transmute::<[u8; 4], i32>(lon_bytes)
                     };
-                    write!(resources.DEBUG_UART, "Lon {}\t", lon).unwrap();
+
+                    write!(resources.DEBUG_UART, "Lon {}\t", (lon as f64)/10000000.0).unwrap();
 
                     let lat_bytes = [
                         resources.UBX.buffer[32],
@@ -377,9 +378,10 @@ const APP: () = {
                     ];
 
                     let lat = unsafe { 
-                         core::mem::transmute::<[u8; 4], f32>(lat_bytes)
+                         core::mem::transmute::<[u8; 4], i32>(lat_bytes)
                     };
-                    write!(resources.DEBUG_UART, "Lat {}\t", lat).unwrap();
+
+                    write!(resources.DEBUG_UART, "Lat {}\t", (lat as f64)/10000000.0 ).unwrap();
 
                     let alt_bytes = [
                         resources.UBX.buffer[44],
@@ -403,7 +405,7 @@ const APP: () = {
                     let speed = unsafe { 
                          core::mem::transmute::<[u8; 4], u32>(speed_bytes)
                     };
-                    write!(resources.DEBUG_UART, "Speed {} mm/s\t", alt).unwrap();
+                    write!(resources.DEBUG_UART, "Speed {} mm/s\r\n", alt).unwrap();
                 }
             
                 

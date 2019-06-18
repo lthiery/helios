@@ -26,6 +26,12 @@ impl Ubx {
 		}
 	}
 
+	fn reset(&mut self){
+		self.in_msg = false;
+		self.count = 0;
+		self.payload_len = 0;
+	}
+
 	pub fn push(&mut self, byte: u8) -> (bool, u16) {
 
 		if self.in_msg {
@@ -41,11 +47,15 @@ impl Ubx {
 			if self.count >= 4 {
 				// msg is over
 				if self.count - LEN_HEADER == self.payload_len + LEN_CHECKSUM {
-					let ret_count = self.count;
-					self.in_msg = false;
-					self.count = 0;
-					self.payload_len = 0;
-					return (true, ret_count);
+
+					// buffer starts after the sync words, so checksum has no offset
+					let (ck_a, ck_b) = calculate_checksum(self.buffer.as_ref(), 0);
+
+					if ck_a == self.buffer[self.count as usize -2] && ck_b == self.buffer[self.count as usize -1] {
+						let count = self.count;
+						self.reset();
+						return (true, count);
+					}
 				} 
 			}
 			
@@ -63,13 +73,13 @@ impl Ubx {
 	}
 }
 
-fn calculate_checksum(buf: &mut [u8]) -> (u8, u8){
+fn calculate_checksum(buf: &[u8], offset: usize) -> (u8, u8){
 	let mut ck_a: u8 = 0;
 	let mut ck_b: u8 = 0;
 
 	let len = buf.len() - 2;
 
-	for i in  2..len {
+	for i in  offset..len {
 		ck_a = ck_a.wrapping_add(buf[i]);
 		ck_b = ck_b.wrapping_add(ck_a);
 	}
@@ -77,8 +87,8 @@ fn calculate_checksum(buf: &mut [u8]) -> (u8, u8){
 }
 
 pub fn set_checksum(buf: &mut [u8]){
-
-	let (ck_a, ck_b) = calculate_checksum(buf);
+	// sync word needs to be ignored, so provide offset
+	let (ck_a, ck_b) = calculate_checksum(buf, 2);
 
 	let len = buf.len() - 2;
 

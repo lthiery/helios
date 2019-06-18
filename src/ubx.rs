@@ -63,8 +63,7 @@ impl Ubx {
 	}
 }
 
-pub fn set_checksum(buf: &mut [u8]){
-
+fn calculate_checksum(buf: &mut [u8]) -> (u8, u8){
 	let mut ck_a: u8 = 0;
 	let mut ck_b: u8 = 0;
 
@@ -74,6 +73,15 @@ pub fn set_checksum(buf: &mut [u8]){
 		ck_a = ck_a.wrapping_add(buf[i]);
 		ck_b = ck_b.wrapping_add(ck_a);
 	}
+	(ck_a, ck_b)
+}
+
+pub fn set_checksum(buf: &mut [u8]){
+
+	let (ck_a, ck_b) = calculate_checksum(buf);
+
+	let len = buf.len() - 2;
+
 	buf[len] = ck_a;
 	buf[len + 1] = ck_b;
 }

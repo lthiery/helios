@@ -50,16 +50,17 @@ impl Ubx {
 
 					// buffer starts after the sync words, so checksum has no offset
 					let (ck_a, ck_b) = calculate_checksum(self.buffer.as_ref(), 0);
+					// make copy of count
+					let count = self.count;
+					self.reset();
 
-					if ck_a == self.buffer[self.count as usize -2] && ck_b == self.buffer[self.count as usize -1] {
-						let count = self.count;
-						self.reset();
+					if ck_a == self.buffer[count as usize -2] && ck_b == self.buffer[count as usize -1] {
 						return (true, count);
+					} else {
+						self.buffer.clear();
 					}
 				} 
 			}
-			
-
         } else {
             // the beginning of a msg has started
             if self.prev_byte == SYNC_1 && byte == SYNC_2 {
@@ -73,7 +74,7 @@ impl Ubx {
 	}
 }
 
-fn calculate_checksum(buf: &[u8], offset: usize) -> (u8, u8){
+pub fn calculate_checksum(buf: &[u8], offset: usize) -> (u8, u8){
 	let mut ck_a: u8 = 0;
 	let mut ck_b: u8 = 0;
 

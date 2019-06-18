@@ -361,6 +361,10 @@ const APP: () = {
                 write!(resources.DEBUG_UART, "Num Sats {}\t", num_sats).unwrap(); 
 
                 if fix_type < 5 && fix_type > 2 {
+
+
+
+
                     let lon_bytes = [
                         resources.UBX.buffer[28],
                         resources.UBX.buffer[29],
@@ -388,10 +392,10 @@ const APP: () = {
                     write!(resources.DEBUG_UART, "Lat {}\t\r\n", (lat as f64)/10000000.0 ).unwrap();
 
                     let alt_bytes = [
-                        resources.UBX.buffer[44],
-                        resources.UBX.buffer[45],
-                        resources.UBX.buffer[46],
-                        resources.UBX.buffer[47],
+                        resources.UBX.buffer[40],
+                        resources.UBX.buffer[41],
+                        resources.UBX.buffer[42],
+                        resources.UBX.buffer[43],
                     ];
 
                     let alt = unsafe { 
@@ -400,10 +404,10 @@ const APP: () = {
                     write!(resources.DEBUG_UART, "Alt {} mm\t", alt).unwrap();
 
                     let speed_bytes = [
-                        resources.UBX.buffer[60],
-                        resources.UBX.buffer[61],
-                        resources.UBX.buffer[62],
-                        resources.UBX.buffer[63],
+                        resources.UBX.buffer[64],
+                        resources.UBX.buffer[65],
+                        resources.UBX.buffer[66],
+                        resources.UBX.buffer[67],
                     ];
 
                     let speed = unsafe { 

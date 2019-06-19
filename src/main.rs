@@ -327,15 +327,16 @@ const APP: () = {
 
     #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, UBX])]
     fn ubx_parse(byte: u8) {
-        static mut COUNT: u8 = 0;
+        static mut COUNT: u16 = 0;
 
         if let Some (msg) = resources.UBX.push(byte) {
             match msg {
                 Message::NP(navpvt) => {
                     write!(resources.DEBUG_UART, "{}\r\n", navpvt);
-                    let packet: [u8; 14] = [
+                    let packet: [u8; 15] = [
                         0xDE, 
-                        *COUNT,
+                        (*COUNT>>8) as u8,
+                        *COUNT as u8,
                         (navpvt.lat >> 24) as u8, 
                         (navpvt.lat >> 16) as u8,
                         (navpvt.lat >> 8) as u8,
@@ -350,7 +351,7 @@ const APP: () = {
                         navpvt.speed as u8,
                     ];
                     LongFi::send(&packet, packet.len());
-                    *COUNT+=1;
+                    *COUNT = COUNT.wrapping_add(1);
 
                 }
             }

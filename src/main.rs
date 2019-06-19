@@ -60,7 +60,7 @@ const APP: () = {
 
         let (mut tx, mut rx) = serial.split();
 
-        write!(tx, "SX1276 test\r\n").unwrap();
+        write!(tx, "Tracker Demo\r\n").unwrap();
 
         // Configure PB2 as input.
         let mut gps_ldo_en = gpiob.pb2.into_push_pull_output();
@@ -106,11 +106,22 @@ const APP: () = {
 
         // Get the delay provider.
         let mut delay = core.SYST.delay(rcc.clocks);
-        let mut reset = gpioc.pc0.into_push_pull_output();
+       let mut reset = gpioc.pc0.into_push_pull_output();
+
+        let mut en_tcxo = gpiob.pb14.into_push_pull_output();
+        en_tcxo.set_high();
 
         reset.set_low();
 
-        delay.delay_ms(100_u16);
+        delay.delay_ms(1_u16);
+
+        reset.set_high();
+        delay.delay_ms(6_u16);
+        LongFi::enable_tcxo();
+
+        reset.set_low();
+
+        delay.delay_ms(1_u16);
 
         reset.set_high();
 
@@ -122,7 +133,6 @@ const APP: () = {
             }
         );
         LongFi::set_buffer(resources.BUFFER);
-        LongFi::set_rx();
 
         let gps_tx_pin = gpioa.pa9;
         let gps_rx_pin = gpioa.pa10;

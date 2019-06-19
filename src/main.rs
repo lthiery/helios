@@ -24,6 +24,29 @@ mod ubx;
 use embedded_hal::digital::v2::OutputPin;
 use crate::ubx::Message;
 
+pub struct AntennaSwitches<RX, TX_RFO, TX_BOOST> 
+{
+    rx: RX,
+    tx_rfo: TX_RFO,
+    tx_boost: TX_BOOST
+}
+
+impl<RX, TX_RFO, TX_BOOST> AntennaSwitches<RX, TX_RFO, TX_BOOST>
+where RX: embedded_hal::digital::v2::OutputPin, TX_RFO: embedded_hal::digital::v2::OutputPin, TX_BOOST: embedded_hal::digital::v2::OutputPin
+{
+    pub fn set_tx(&mut self){
+        self.rx.set_low();
+        self.tx_rfo.set_low();
+        self.tx_boost.set_high();
+    }
+
+    pub fn set_rx(&mut self){
+        self.rx.set_high();
+        self.tx_rfo.set_low();
+        self.tx_boost.set_low();
+    }
+}
+
 #[rtfm::app(device = stm32l0xx_hal::pac)]
 const APP: () = {
     static mut EXTI: pac::EXTI = ();
@@ -37,6 +60,7 @@ const APP: () = {
     static mut I2C: stm32l0xx_hal::i2c::I2c<stm32l0::stm32l0x2::I2C1, stm32l0xx_hal::gpio::gpiob::PB9<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::OpenDrain>>, stm32l0xx_hal::gpio::gpiob::PB8<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::OpenDrain>>> = ();
     static mut ACCEL: bma400::Bma400 = ();
     static mut UBX: ubx::Ubx = ();
+    static mut ANT_SW: AntennaSwitches<stm32l0xx_hal::gpio::gpioa::PA1<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>, stm32l0xx_hal::gpio::gpioc::PC2<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>, stm32l0xx_hal::gpio::gpioc::PC1<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>> = ();
 
     #[init(resources = [BUFFER])]
     fn init() -> init::LateResources {
@@ -106,9 +130,19 @@ const APP: () = {
 
         // Get the delay provider.
         let mut delay = core.SYST.delay(rcc.clocks);
-       let mut reset = gpioc.pc0.into_push_pull_output();
-
+        let mut reset = gpioc.pc0.into_push_pull_output();
         let mut en_tcxo = gpiob.pb14.into_push_pull_output();
+
+        let mut ant_sw = AntennaSwitches {       
+            rx:  gpioa.pa1.into_push_pull_output(),
+            tx_rfo: gpioc.pc2.into_push_pull_output(),
+            tx_boost: gpioc.pc1.into_push_pull_output(),
+        };
+
+        ant_sw.rx.set_low();
+        ant_sw.tx_rfo.set_low();
+        ant_sw.tx_boost.set_low();
+
         en_tcxo.set_high();
 
         reset.set_low();
@@ -148,27 +182,6 @@ const APP: () = {
         let (mut gps_tx, mut gps_rx) = serial.split();
 
         delay.delay_ms(1000_u16);
-
-
-
-
-        //write!(tx, "\r\n").unwrap();
-
-
-        delay.delay_ms(200_u16);
-
-        // let mut get_cfg = [ubx::SYNC_1, ubx::SYNC_2, ubx::ClassId::Cfg as u8, 0x00, 
-        //     0,
-        //     0x00, 0x00,                
-        // ];
-        // ubx::set_checksum(&mut get_cfg);
-
-        // for byte in get_cfg.iter() {
-        //     gps_tx.write(*byte);
-        //     write!(tx, "{:x} ", *byte).unwrap();
-        // }
-        // write!(tx, "\r\n").unwrap();
-
 
         let sda = gpiob.pb9.into_open_drain_output();
         let scl = gpiob.pb8.into_open_drain_output();
@@ -278,6 +291,7 @@ const APP: () = {
             ACCEL: accel,
             GPS_EN: gps_ldo_en,
             UBX: ubx::Ubx::new(),
+            ANT_SW: ant_sw,
         }
     }
 
@@ -294,13 +308,14 @@ const APP: () = {
         }
     }                
 
-    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, BUFFER])]
+    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, BUFFER, ANT_SW])]
     fn radio_event(event: RfEvent){
         let client_event = LongFi::handle_event(event);
         
         match client_event {
             ClientEvent::ClientEvent_TxDone => {
                 write!(resources.DEBUG_UART, "Transmit Done!\r\n").unwrap();
+                resources.ANT_SW.set_rx();
                 LongFi::set_rx();
             }
             ClientEvent::ClientEvent_Rx => {
@@ -325,7 +340,7 @@ const APP: () = {
         }
     }
 
-    #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, UBX])]
+    #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, UBX, ANT_SW])]
     fn ubx_parse(byte: u8) {
         static mut COUNT: u8 = 0;
 
@@ -334,7 +349,7 @@ const APP: () = {
                 Message::NP(navpvt) => {
                     write!(resources.DEBUG_UART, "{}\r\n", navpvt);
                     let packet: [u8; 14] = [
-                        0xDE, 
+                        0xAB, 
                         *COUNT,
                         (navpvt.lat >> 24) as u8, 
                         (navpvt.lat >> 16) as u8,
@@ -349,6 +364,7 @@ const APP: () = {
                         (navpvt.speed >> 8) as u8,
                         navpvt.speed as u8,
                     ];
+                    resources.ANT_SW.set_tx();
                     LongFi::send(&packet, packet.len());
                     *COUNT+=1;
 

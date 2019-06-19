@@ -75,9 +75,10 @@ impl NavPvt {
 
 		let lon = unsafe { core::mem::transmute::<[u8; 4], i32>([buf[28], buf[29], buf[30], buf[31]])};
 		let lat = unsafe { core::mem::transmute::<[u8; 4], i32>([buf[32], buf[33], buf[34], buf[35]])};
-		let alt = unsafe { core::mem::transmute::<[u8; 4], i32>([buf[40], buf[41], buf[42], buf[43]])};
-		let speed = unsafe { core::mem::transmute::<[u8; 4], i32>([buf[64],	buf[65], buf[66], buf[67]])};
-
+		let mut alt = unsafe { core::mem::transmute::<[u8; 4], i32>([buf[40], buf[41], buf[42], buf[43]])};
+		alt /= 1000;
+		let mut speed = unsafe { core::mem::transmute::<[u8; 4], i32>([buf[64],	buf[65], buf[66], buf[67]])};
+		speed /= 1000;
 		NavPvt {
 			fix_type,
 			year,

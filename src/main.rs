@@ -6,41 +6,45 @@ extern crate panic_halt;
 use stm32l0xx_hal as hal;
 use sx1276;
 
-use sx1276::{RfConfig, QualityOfService, ClientEvent, RfEvent};
 use sx1276::LongFi;
+use sx1276::{ClientEvent, QualityOfService, RfConfig, RfEvent};
 
 use core::fmt::Write;
-use hal::{exti, exti::TriggerEdge, gpio::*, pac, prelude::*, rcc::Config, spi, serial};
+use hal::{exti, exti::TriggerEdge, gpio::*, pac, prelude::*, rcc::Config, serial, spi};
 use stm32l0;
 
-#[macro_use] extern crate nb;
+#[macro_use]
+extern crate nb;
 use nb::block;
 
-#[macro_use] extern crate enum_primitive;
+#[macro_use]
+extern crate enum_primitive;
 
 mod bma400;
 mod ubx;
 
-use embedded_hal::digital::v2::OutputPin;
 use crate::ubx::Message;
+use embedded_hal::digital::v2::OutputPin;
 
-pub struct AntennaSwitches<RX, TX_RFO, TX_BOOST> 
-{
+pub struct AntennaSwitches<RX, TX_RFO, TX_BOOST> {
     rx: RX,
     tx_rfo: TX_RFO,
-    tx_boost: TX_BOOST
+    tx_boost: TX_BOOST,
 }
 
 impl<RX, TX_RFO, TX_BOOST> AntennaSwitches<RX, TX_RFO, TX_BOOST>
-where RX: embedded_hal::digital::v2::OutputPin, TX_RFO: embedded_hal::digital::v2::OutputPin, TX_BOOST: embedded_hal::digital::v2::OutputPin
+where
+    RX: embedded_hal::digital::v2::OutputPin,
+    TX_RFO: embedded_hal::digital::v2::OutputPin,
+    TX_BOOST: embedded_hal::digital::v2::OutputPin,
 {
-    pub fn set_tx(&mut self){
+    pub fn set_tx(&mut self) {
         self.rx.set_low();
         self.tx_rfo.set_low();
         self.tx_boost.set_high();
     }
 
-    pub fn set_rx(&mut self){
+    pub fn set_rx(&mut self) {
         self.rx.set_high();
         self.tx_rfo.set_low();
         self.tx_boost.set_low();
@@ -57,10 +61,22 @@ const APP: () = {
     static mut GPS_EN: gpiob::PB2<Output<PushPull>> = ();
     static mut GPS_TX: serial::Tx<stm32l0::stm32l0x2::USART1> = ();
     static mut GPS_RX: serial::Rx<stm32l0::stm32l0x2::USART1> = ();
-    static mut I2C: stm32l0xx_hal::i2c::I2c<stm32l0::stm32l0x2::I2C1, stm32l0xx_hal::gpio::gpiob::PB9<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::OpenDrain>>, stm32l0xx_hal::gpio::gpiob::PB8<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::OpenDrain>>> = ();
+    static mut I2C: stm32l0xx_hal::i2c::I2c<
+        stm32l0::stm32l0x2::I2C1,
+        stm32l0xx_hal::gpio::gpiob::PB9<
+            stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::OpenDrain>,
+        >,
+        stm32l0xx_hal::gpio::gpiob::PB8<
+            stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::OpenDrain>,
+        >,
+    > = ();
     static mut ACCEL: bma400::Bma400 = ();
     static mut UBX: ubx::Ubx = ();
-    static mut ANT_SW: AntennaSwitches<stm32l0xx_hal::gpio::gpioa::PA1<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>, stm32l0xx_hal::gpio::gpioc::PC2<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>, stm32l0xx_hal::gpio::gpioc::PC1<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>> = ();
+    static mut ANT_SW: AntennaSwitches<
+        stm32l0xx_hal::gpio::gpioa::PA1<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>,
+        stm32l0xx_hal::gpio::gpioc::PC2<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>,
+        stm32l0xx_hal::gpio::gpioc::PC1<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>,
+    > = ();
 
     #[init(resources = [BUFFER])]
     fn init() -> init::LateResources {
@@ -71,7 +87,7 @@ const APP: () = {
         // the RCC register.
         let gpioa = device.GPIOA.split(&mut rcc);
         let gpiob = device.GPIOB.split(&mut rcc);
-        let gpioc = device.GPIOC.split(&mut rcc);    
+        let gpioc = device.GPIOC.split(&mut rcc);
 
         let tx_pin = gpioa.pa2;
         let rx_pin = gpioa.pa3;
@@ -91,11 +107,10 @@ const APP: () = {
 
         gps_ldo_en.set_high();
 
-
         let mut gps_enable = gpioa.pa5.into_push_pull_output();
 
         gps_enable.set_low();
-       
+
         let exti = device.EXTI;
 
         // Configure PB4 as input for rising interrupt
@@ -122,7 +137,7 @@ const APP: () = {
         let miso = gpioa.pa6;
         let mosi = gpioa.pa7;
         let nss = gpioa.pa15.into_push_pull_output();
-        
+
         // Initialise the SPI peripheral.
         let spi = device
             .SPI1
@@ -133,8 +148,8 @@ const APP: () = {
         let mut reset = gpioc.pc0.into_push_pull_output();
         let mut en_tcxo = gpiob.pb14.into_push_pull_output();
 
-        let mut ant_sw = AntennaSwitches {       
-            rx:  gpioa.pa1.into_push_pull_output(),
+        let mut ant_sw = AntennaSwitches {
+            rx: gpioa.pa1.into_push_pull_output(),
             tx_rfo: gpioc.pc2.into_push_pull_output(),
             tx_boost: gpioc.pc1.into_push_pull_output(),
         };
@@ -159,13 +174,11 @@ const APP: () = {
 
         reset.set_high();
 
-        LongFi::initialize(
-            RfConfig {
-                always_on: true,
-                qos: QualityOfService::QOS_0,
-                network_poll: 0,
-            }
-        );
+        LongFi::initialize(RfConfig {
+            always_on: true,
+            qos: QualityOfService::QOS_0,
+            network_poll: 0,
+        });
         LongFi::set_buffer(resources.BUFFER);
 
         let gps_tx_pin = gpioa.pa9;
@@ -174,7 +187,11 @@ const APP: () = {
         // Configure the serial peripheral.
         let mut serial = device
             .USART1
-            .usart((gps_tx_pin, gps_rx_pin), serial::Config::default(), &mut rcc)
+            .usart(
+                (gps_tx_pin, gps_rx_pin),
+                serial::Config::default(),
+                &mut rcc,
+            )
             .unwrap();
 
         serial.listen(serial::Event::Rxne);
@@ -186,9 +203,7 @@ const APP: () = {
         let sda = gpiob.pb9.into_open_drain_output();
         let scl = gpiob.pb8.into_open_drain_output();
 
-        let mut i2c = device
-            .I2C1
-            .i2c(sda, scl, 100.khz(), &mut rcc);
+        let mut i2c = device.I2C1.i2c(sda, scl, 100.khz(), &mut rcc);
 
         let write_buf = [0x00u8; 1];
         let mut buffer = [0u8; 1];
@@ -226,22 +241,22 @@ const APP: () = {
     }
 
     #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, I2C, ACCEL, GPS_EN])]
-    fn accel_activity(){
+    fn accel_activity() {
         let int_status = resources.ACCEL.get_int_status(resources.I2C).unwrap();
 
         if int_status == 0 {
             write!(resources.DEBUG_UART, "Moving\r\n");
-            //resources.GPS_EN.set_high();
+        //resources.GPS_EN.set_high();
         } else {
             write!(resources.DEBUG_UART, "Idle\r\n");
             //resources.GPS_EN.set_low();
         }
-    }                
+    }
 
     #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, BUFFER, ANT_SW])]
-    fn radio_event(event: RfEvent){
+    fn radio_event(event: RfEvent) {
         let client_event = LongFi::handle_event(event);
-        
+
         match client_event {
             ClientEvent::ClientEvent_TxDone => {
                 write!(resources.DEBUG_UART, "Transmit Done!\r\n").unwrap();
@@ -257,7 +272,12 @@ const APP: () = {
                 write!(resources.DEBUG_UART, "  Snr    =  {}\r\n", rx_packet.snr).unwrap();
                 unsafe {
                     for i in 0..rx_packet.len {
-                            write!(resources.DEBUG_UART, "{:X} ", *rx_packet.buf.offset(i as isize)).unwrap();
+                        write!(
+                            resources.DEBUG_UART,
+                            "{:X} ",
+                            *rx_packet.buf.offset(i as isize)
+                        )
+                        .unwrap();
                     }
                     write!(resources.DEBUG_UART, "\r\n").unwrap();
                 }
@@ -266,7 +286,7 @@ const APP: () = {
             }
             _ => {
                 write!(resources.DEBUG_UART, "Unhandled Client Event\r\n").unwrap();
-            },
+            }
         }
     }
 
@@ -274,20 +294,20 @@ const APP: () = {
     fn ubx_parse(byte: u8) {
         static mut COUNT: u16 = 0;
 
-        if let Some (msg) = resources.UBX.push(byte) {
+        if let Some(msg) = resources.UBX.push(byte) {
             match msg {
                 Message::NP(navpvt) => {
                     write!(resources.DEBUG_UART, "{}\r\n", navpvt);
 
                     let packet: [u8; 15] = [
-                        0xDE, 
-                        (*COUNT>>8) as u8,
+                        0xDE,
+                        (*COUNT >> 8) as u8,
                         *COUNT as u8,
-                        (navpvt.lat >> 24) as u8, 
+                        (navpvt.lat >> 24) as u8,
                         (navpvt.lat >> 16) as u8,
                         (navpvt.lat >> 8) as u8,
                         navpvt.lat as u8,
-                        (navpvt.lon >> 24) as u8, 
+                        (navpvt.lon >> 24) as u8,
                         (navpvt.lon >> 16) as u8,
                         (navpvt.lon >> 8) as u8,
                         navpvt.lon as u8,
@@ -299,7 +319,6 @@ const APP: () = {
                     resources.ANT_SW.set_tx();
                     LongFi::send(&packet, packet.len());
                     *COUNT = COUNT.wrapping_add(1);
-
                 }
             }
         }
@@ -318,9 +337,8 @@ const APP: () = {
 
         if exti::line_is_triggered(reg, resources.SX1276_DIO0.i) {
             resources.EXTI.clear_irq(resources.SX1276_DIO0.i);
-            spawn.radio_event(RfEvent::DIO0); 
+            spawn.radio_event(RfEvent::DIO0);
         }
-
     }
 
     #[interrupt(priority = 3, resources = [BMA400_INT1, EXTI], spawn = [accel_activity])]
@@ -330,7 +348,7 @@ const APP: () = {
         if exti::line_is_triggered(reg, resources.BMA400_INT1.i) {
             resources.EXTI.clear_irq(resources.BMA400_INT1.i);
             spawn.accel_activity();
-        }  
+        }
     }
 
     // Interrupt handlers used to dispatch software tasks
@@ -339,20 +357,17 @@ const APP: () = {
     }
 };
 
-
 use stm32l0xx_hal::gpio::gpioa::*;
 use stm32l0xx_hal::gpio::{Floating, Input, PushPull};
 
+use core::ffi;
 use embedded_hal::spi::FullDuplex;
-use core::ffi; 
 
 use stm32l0xx_hal::pac::SPI1;
 
-
-
 #[repr(C, align(4))]
 pub struct SpiInstance {
-    Instance:*mut ffi::c_void,
+    Instance: *mut ffi::c_void,
 }
 
 #[repr(C, align(4))]
@@ -365,7 +380,6 @@ pub type Spi_t = Spi_s;
 
 #[no_mangle]
 pub extern "C" fn SpiInOut(s: &mut Spi_t, outData: u16) -> u16 {
-
     let spi: &mut hal::spi::Spi<
         SPI1,
         (
@@ -374,14 +388,15 @@ pub extern "C" fn SpiInOut(s: &mut Spi_t, outData: u16) -> u16 {
             PA7<Input<Floating>>,
         ),
     > = unsafe {
-        &mut *(s.Spi.Instance as *mut hal::spi::Spi<
-            SPI1,
-            (
-                PA3<Input<Floating>>,
-                PA6<Input<Floating>>,
-                PA7<Input<Floating>>,
-            ),
-        >)
+        &mut *(s.Spi.Instance
+            as *mut hal::spi::Spi<
+                SPI1,
+                (
+                    PA3<Input<Floating>>,
+                    PA6<Input<Floating>>,
+                    PA7<Input<Floating>>,
+                ),
+            >)
     };
 
     spi.send(outData as u8).unwrap();
@@ -389,7 +404,6 @@ pub extern "C" fn SpiInOut(s: &mut Spi_t, outData: u16) -> u16 {
 
     inData as u16
 }
-
 
 type Gpio_t = *mut ffi::c_void;
 
@@ -421,7 +435,6 @@ pub enum PinConfigs {
     PIN_OPEN_DRAIN,
 }
 
-
 #[no_mangle]
 pub extern "C" fn GpioInit(
     obj: Gpio_t,
@@ -436,8 +449,7 @@ pub extern "C" fn GpioInit(
 
     if (val == 0) {
         gpio.set_low();
-    }
-    else {
+    } else {
         gpio.set_high();
     }
 }
@@ -446,7 +458,6 @@ pub extern "C" fn GpioInit(
 pub extern "C" fn GpioWrite(obj: Gpio_t, val: u8) {
     let gpio: &mut stm32l0xx_hal::gpio::gpioa::PA15<Output<PushPull>> =
         unsafe { &mut *(obj as *mut stm32l0xx_hal::gpio::gpioa::PA15<Output<PushPull>>) };
-
 
     if (val == 0) {
         gpio.set_low().unwrap();
@@ -492,20 +503,22 @@ pub extern "C" fn TimerLowPowerHandler() {}
 type irq_ptr = extern "C" fn();
 
 #[no_mangle]
-pub extern "C" fn SX1276GetPaSelect(channel: u32) -> u8 {0}
+pub extern "C" fn SX1276GetPaSelect(channel: u32) -> u8 {
+    0
+}
 
 use cortex_m::asm;
 
 #[no_mangle]
-pub extern "C" fn DelayMs(ms: u32){
+pub extern "C" fn DelayMs(ms: u32) {
     //asm::delay(ms);
 }
 
 #[no_mangle]
-pub extern "C" fn SX1276SetAntSwLowPower(status: bool){}
+pub extern "C" fn SX1276SetAntSwLowPower(status: bool) {}
 
 #[no_mangle]
-pub extern "C" fn SX1276SetAntSw(rxTx: u8){}
+pub extern "C" fn SX1276SetAntSw(rxTx: u8) {}
 
 #[no_mangle]
-pub extern "C" fn assert_param(expr: bool){}
+pub extern "C" fn assert_param(expr: bool) {}

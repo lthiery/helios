@@ -3,15 +3,15 @@ use heapless::{consts::U128, Vec};
 pub const SYNC_1: u8 = 0xB5;
 pub const SYNC_2: u8 = 0x62;
 
-const LEN_HEADER: u16 = 4; 	// num of bytes in header minus the sync chars
+const LEN_HEADER: u16 = 4;   // num of bytes in header minus the sync chars
 const LEN_CHECKSUM: u16 = 2; // number of checksum bytes
 
 pub enum Message {
-	NP(NavPvt)
+    NP(NavPvt)
 }
 
 pub struct Ubx {
-	pub buffer: Vec<u8, U128>,
+    pub buffer: Vec<u8, U128>,
     pub prev_byte: u8,
     pub in_msg: bool,
     pub payload_len: u16,
@@ -152,11 +152,71 @@ impl Ubx {
                 self.in_msg = true;
                 self.prev_byte = 0;
             } else {
-            	self.prev_byte = byte;
+                self.prev_byte = byte;
             }
         }
         None
-	}
+    }
+
+    pub fn enable_ubx_protocol<TX>(&self, gps_tx: &mut TX)
+    where TX: embedded_hal::serial::Write<u8>
+    {
+        //          HEADER1       HEADER2           CLASS      ID
+        let mut set_ubx = [SYNC_1, SYNC_2, ClassId::Cfg as u8, 0x00, 
+            20, 0x00,                   // length 
+            0x01,                       // port ID
+            0x00,                       // reserved
+            0x00, 0x00,                 // tx ready
+            0xD0, 0x08, 0x00, 0x00,     // MODE (8 bit len, no parity, 1 stop bit)
+            0x80, 0x25, 0x00, 0x00,     // BAUD (9600)
+            0b01, 0x00,                 // inProtoMask (UBX only) 
+            0b01, 0x00,                 // outProtoMask (UBX only) 
+            0x00, 0x00, 0x00, 0x00,     // reserved
+            0x00, 0x00,                 // checksum bytes
+        ];
+        self.set_checksum_and_write(gps_tx, &mut set_ubx)
+    }
+
+    pub fn enable_nav_pvt<TX>(&self, gps_tx: &mut TX)
+    where TX: embedded_hal::serial::Write<u8>
+    {
+        //       HEADER1       HEADER2                  CLASS     ID
+        let mut enable_nav = [SYNC_1, SYNC_2, ClassId::Cfg as u8, 0x01,
+            8, 0x00,    // length
+            ClassId::Nav as u8, 0x07, 
+            0x00, // port 0
+            0x01, // port 1
+            0x00, // port 2
+            0x00, // port 3
+            0x00, // port 4
+            0x00, // port 5
+            0x00, 0x00,                 // checksum bytes
+        ];
+        self.set_checksum_and_write(gps_tx, &mut enable_nav)
+    }
+
+    pub fn enable_ext_ant<TX>(&self, gps_tx: &mut TX)
+    where TX: embedded_hal::serial::Write<u8>
+    {
+        let mut enable_ext_ant = [
+            SYNC_1, SYNC_2,
+            ClassId::Cfg as u8, 0x13,                       /* CLASS, ID                 */
+            0x04, 0x00,                                     /* LENGTH                    */
+            0x00, 0x00,                                     /* FLAGS                     */
+            0xf0, 0xb9,                                     /* PINS                      */
+            0x00, 0x00,                                     /* CK_A, CK_B                */
+        ];
+        self.set_checksum_and_write(gps_tx, &mut enable_ext_ant)
+    }
+
+    fn set_checksum_and_write<TX>(&self, gps_tx: &mut TX, mut payload: &mut [u8])
+    where TX: embedded_hal::serial::Write<u8>
+    {
+        set_checksum(&mut payload);
+        for byte in payload.iter() {
+            block!(gps_tx.write(*byte));
+        }
+    }
 }
 
 pub fn calculate_checksum(buf: &[u8], offset: usize) -> (u8, u8){

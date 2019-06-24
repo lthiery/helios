@@ -199,85 +199,15 @@ const APP: () = {
         accel.wake(&mut i2c);
         accel.configure_inactivity_interupt(&mut i2c, 0x003F);
 
-        //                  HEADER1       HEADER2           CLASS              ID   
-        let mut set_ubx = [ubx::SYNC_1, ubx::SYNC_2, ubx::ClassId::Cfg as u8, 0x00, 
-            20, 0x00,                   // length 
-            0x01,                       // port ID
-            0x00,                       // reserved
-            0x00, 0x00,                 // tx ready
-            0xD0, 0x08, 0x00, 0x00,     // MODE (8 bit len, no parity, 1 stop bit)
-            0x80, 0x25, 0x00, 0x00,     // BAUD (9600)
-            0b01, 0x00,                 // inProtoMask (UBX only) 
-            0b01, 0x00,                 // outProtoMask (UBX only) 
-            0x00, 0x00, 0x00, 0x00,     // reserved
-            0x00, 0x00,                 // checksum bytes
-        ];
-
-        ubx::set_checksum(&mut set_ubx);
-
-        for byte in set_ubx.iter() {
-            block!(gps_tx.write(*byte));
-        }
-
+        let ubx = ubx::Ubx::new();
+        //<stm32l0xx_hal::serial::Tx<stm32l0::stm32l0x2::USART1>
+        ubx.enable_ubx_protocol(&mut gps_tx);
         delay.delay_ms(50_u16);
-
-        //                  HEADER1       HEADER2           CLASS              ID   
-        let mut set_ubx = [ubx::SYNC_1, ubx::SYNC_2, ubx::ClassId::Cfg as u8, 0x00, 
-            20, 0x00,                   // length 
-            0x01,                       // port ID
-            0x00,                       // reserved
-            0x00, 0x00,                 // tx ready
-            0xD0, 0x08, 0x00, 0x00,     // MODE (8 bit len, no parity, 1 stop bit)
-            0x80, 0x25, 0x00, 0x00,     // BAUD (9600)
-            0b01, 0x00,                  // inProtoMask (UBX only) 
-            0b01, 0x00,                  // outProtoMask (UBX only) 
-            0x00, 0x00, 0x00, 0x00,     // reserved
-            0x00, 0x00,                 // checksum bytes
-        ];
-
-        ubx::set_checksum(&mut set_ubx);
-
-        for byte in set_ubx.iter() {
-            block!(gps_tx.write(*byte));
-        }
-
+        ubx.enable_ubx_protocol(&mut gps_tx);
         delay.delay_ms(50_u16);
-
-        //       HEADER1       HEADER2                  CLASS              ID   
-        let mut enable_nav = [ubx::SYNC_1, ubx::SYNC_2, ubx::ClassId::Cfg as u8, 0x01, 
-            8, 0x00,                    // length 
-            ubx::ClassId::Nav as u8, 0x07, 
-            0x00, // port 0
-            0x01, // port 1
-            0x00, // port 2
-            0x00, // port 3
-            0x00, // port 4
-            0x00, // port 5
-            0x00, 0x00,                 // checksum bytes
-        ];
-
-        ubx::set_checksum(&mut enable_nav);
-
-        for byte in enable_nav.iter() {
-            block!(gps_tx.write(*byte));
-        }
-
+        ubx.enable_nav_pvt(&mut gps_tx);
         delay.delay_ms(50_u16);
-
-       let mut enable_ext_ant = [
-            ubx::SYNC_1, ubx::SYNC_2,         
-            ubx::ClassId::Cfg as u8, 0x13,                           /* CLASS, ID                 */
-            0x04, 0x00,                                     /* LENGTH                    */
-            0x00, 0x00,                                     /* FLAGS                     */
-            0xf0, 0xb9,                                     /* PINS                      */
-            0x00, 0x00,                                     /* CK_A, CK_B                */
-        ];
-
-        ubx::set_checksum(&mut enable_ext_ant);
-
-        for byte in enable_ext_ant.iter() {
-            block!(gps_tx.write(*byte));
-        }
+        ubx.enable_ext_ant(&mut gps_tx);
 
         // Return the initialised resources.
         init::LateResources {
@@ -290,7 +220,7 @@ const APP: () = {
             I2C: i2c,
             ACCEL: accel,
             GPS_EN: gps_ldo_en,
-            UBX: ubx::Ubx::new(),
+            UBX: ubx,
             ANT_SW: ant_sw,
         }
     }

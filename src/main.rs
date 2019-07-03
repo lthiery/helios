@@ -174,10 +174,16 @@ const APP: () = {
 
         reset.set_high();
 
+
+        let device_id = unsafe {::core::ptr::read(0x1FF80050 as *const u32)} as u16;
+        write!(tx, "Device ID = {:x}\r\n", device_id).unwrap();
+
         LongFi::initialize(RfConfig {
             always_on: true,
             qos: QualityOfService::QOS_0,
             network_poll: 0,
+            device_id,
+            oui: 0x365aabe7
         });
         LongFi::set_buffer(resources.BUFFER);
 
@@ -205,17 +211,12 @@ const APP: () = {
 
         let mut i2c = device.I2C1.i2c(sda, scl, 100.khz(), &mut rcc);
 
-        let write_buf = [0x00u8; 1];
-        let mut buffer = [0u8; 1];
-        const BMA400: u8 = 0b0010100;
-
         let accel = bma400::Bma400::new(false);
 
         accel.wake(&mut i2c);
         accel.configure_inactivity_interupt(&mut i2c, 0x003F);
 
         let ubx = ubx::Ubx::new();
-        //<stm32l0xx_hal::serial::Tx<stm32l0::stm32l0x2::USART1>
         ubx.enable_ubx_protocol(&mut gps_tx);
         delay.delay_ms(50_u16);
         ubx.enable_ubx_protocol(&mut gps_tx);

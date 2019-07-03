@@ -43,6 +43,6 @@ branch					= "working-code"
 
 [dependencies.stm32l0xx-hal]
 git                     = "https://github.com/lthiery/stm32l0xx-hal.git"
-branch					= "i2c-test"
+branch					= "master"
 features                = ["stm32l0x2","rt"]
 

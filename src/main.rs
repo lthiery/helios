@@ -175,7 +175,7 @@ const APP: () = {
         reset.set_high();
 
 
-        let device_id = unsafe {::core::ptr::read(0x1FF80050 as *const u32)} as u16;
+        let device_id = unsafe {::core::ptr::read(0x1FF8_0050 as *const u32)} as u16;
         write!(tx, "Device ID = {:x}\r\n", device_id).unwrap();
 
         LongFi::initialize(RfConfig {
@@ -299,6 +299,8 @@ const APP: () = {
             match msg {
                 Message::NP(navpvt) => {
                     write!(resources.DEBUG_UART, "{}\r\n", navpvt);
+
+                    write!(resources.DEBUG_UART, "{} {}\r\n", *COUNT, navpvt);
 
                     let packet: [u8; 15] = [
                         0xDE,

@@ -77,6 +77,7 @@ const APP: () = {
         stm32l0xx_hal::gpio::gpioc::PC2<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>,
         stm32l0xx_hal::gpio::gpioc::PC1<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>,
     > = ();
+    static mut WD: stm32l0xx_hal::watchdog::IndependedWatchdog = ();
 
     #[init(resources = [BUFFER])]
     fn init() -> init::LateResources {
@@ -175,7 +176,8 @@ const APP: () = {
         reset.set_high();
 
 
-        let device_id = unsafe {::core::ptr::read(0x1FF8_0050 as *const u32)} as u16;
+        let raw_device_id = unsafe {::core::ptr::read(0x1FF8_0064 as *const u32)};
+        let device_id: u16 = (raw_device_id as u16) | ((raw_device_id & 0xFF0000) >> 8) as u16;
         write!(tx, "Device ID = {:x}\r\n", device_id).unwrap();
 
         LongFi::initialize(RfConfig {
@@ -225,6 +227,12 @@ const APP: () = {
         delay.delay_ms(50_u16);
         ubx.enable_ext_ant(&mut gps_tx);
 
+        // Configure the independent watchdog.
+        let mut watchdog = device.IWDG.watchdog();
+
+        // Start a watchdog with a 1000ms period.
+        watchdog.start(1000.ms());
+        
         // Return the initialised resources.
         init::LateResources {
             EXTI: exti,
@@ -238,6 +246,7 @@ const APP: () = {
             GPS_EN: gps_ldo_en,
             UBX: ubx,
             ANT_SW: ant_sw,
+            WD: watchdog
         }
     }
 
@@ -254,15 +263,16 @@ const APP: () = {
         }
     }
 
-    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, BUFFER, ANT_SW])]
+    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, BUFFER, ANT_SW, WD])]
     fn radio_event(event: RfEvent) {
+        resources.WD.feed();
         let client_event = LongFi::handle_event(event);
 
         match client_event {
             ClientEvent::ClientEvent_TxDone => {
-                write!(resources.DEBUG_UART, "Transmit Done!\r\n").unwrap();
-                resources.ANT_SW.set_rx();
-                LongFi::set_rx();
+                write!(resources.DEBUG_UART, "=>Transmit Done!\r\n\r\n").unwrap();
+                // resources.ANT_SW.set_rx();
+                // LongFi::set_rx();
             }
             ClientEvent::ClientEvent_Rx => {
                 // get receive buffer
@@ -291,19 +301,17 @@ const APP: () = {
         }
     }
 
-    #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, UBX, ANT_SW])]
+    #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, UBX, ANT_SW, WD])]
     fn ubx_parse(byte: u8) {
         static mut COUNT: u16 = 0;
-
+        resources.WD.feed();
+        
         if let Some(msg) = resources.UBX.push(byte) {
             match msg {
                 Message::NP(navpvt) => {
-                    write!(resources.DEBUG_UART, "{}\r\n", navpvt);
+                    write!(resources.DEBUG_UART, "{}\t{}", *COUNT, navpvt);
 
-                    write!(resources.DEBUG_UART, "{} {}\r\n", *COUNT, navpvt);
-
-                    let packet: [u8; 15] = [
-                        0xDE,
+                    let packet: [u8; 14] = [
                         (*COUNT >> 8) as u8,
                         *COUNT as u8,
                         (navpvt.lat >> 24) as u8,

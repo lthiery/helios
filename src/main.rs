@@ -332,7 +332,7 @@ const APP: () = {
                     resources.ANT_SW.set_tx();
 
                     // get random u32 from LongFi and scale such as (0,250)
-                    let delay: u16 = (LongFi::get_random() / 17179869) as u16;
+                    let delay: u16 = (LongFi::get_random()/ 17179869) as u16;
                     // delay for that long to avoid collisions
                     resources.DELAY.delay_ms(delay);
                     

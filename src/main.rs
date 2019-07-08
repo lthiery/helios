@@ -232,8 +232,8 @@ const APP: () = {
         let mut watchdog = device.IWDG.watchdog();
 
         // Start a watchdog with a 1000ms period.
-        watchdog.start(1000.ms());
-        
+        LongFi::send_test();
+
         // Return the initialised resources.
         init::LateResources {
             EXTI: exti,
@@ -275,6 +275,7 @@ const APP: () = {
                 write!(resources.DEBUG_UART, "=>Transmit Done!\r\n\r\n").unwrap();
                 // resources.ANT_SW.set_rx();
                 // LongFi::set_rx();
+                LongFi::send_test();
             }
             ClientEvent::ClientEvent_Rx => {
                 // get receive buffer

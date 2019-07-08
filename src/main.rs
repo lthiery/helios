@@ -78,6 +78,7 @@ const APP: () = {
         stm32l0xx_hal::gpio::gpioc::PC1<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>,
     > = ();
     static mut WD: stm32l0xx_hal::watchdog::IndependedWatchdog = ();
+    static mut DELAY: stm32l0xx_hal::delay::Delay = (); 
 
     #[init(resources = [BUFFER])]
     fn init() -> init::LateResources {
@@ -246,7 +247,8 @@ const APP: () = {
             GPS_EN: gps_ldo_en,
             UBX: ubx,
             ANT_SW: ant_sw,
-            WD: watchdog
+            WD: watchdog,
+            DELAY: delay
         }
     }
 
@@ -301,7 +303,7 @@ const APP: () = {
         }
     }
 
-    #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, UBX, ANT_SW, WD])]
+    #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, UBX, ANT_SW, WD, DELAY])]
     fn ubx_parse(byte: u8) {
         static mut COUNT: u16 = 0;
         resources.WD.feed();
@@ -328,6 +330,12 @@ const APP: () = {
                         navpvt.speed as u8,
                     ];
                     resources.ANT_SW.set_tx();
+
+                    // get random u32 from LongFi and scale such as (0,250)
+                    let delay: u16 = (LongFi::get_random() / 17179869) as u16;
+                    // delay for that long to avoid collisions
+                    resources.DELAY.delay_ms(delay);
+                    
                     LongFi::send(&packet, packet.len());
                     *COUNT = COUNT.wrapping_add(1);
                 }

@@ -42,7 +42,6 @@ branch					= "working-code"
 
 
 [dependencies.stm32l0xx-hal]
-git                     = "https://github.com/lthiery/stm32l0xx-hal.git"
-branch					= "master"
-features                = ["stm32l0x2","rt"]
+path = "../stm32l0xx-hal"
+features = ["stm32l0x2", "rt"]
 

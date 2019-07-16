@@ -52,3 +52,8 @@ target = "thumbv6m-none-eabi"    # Cortex-M0 and Cortex-M0+
 # target = "thumbv7em-none-eabihf" # Cortex-M4F and Cortex-M7F (with FPU)
 ```
 
+Creating a DFU:
+
+You'll need to turn the cargo ouput into intel-hex for the DFU utility:
+`arm-none-eabi-objcopy -O ihex target/thumbv6m-none-eabi/release/helios helios.hex`
+

@@ -146,7 +146,7 @@ const APP: () = {
             TriggerEdge::All,
         );
 
-        // Configure PB5 as input for rising interrupt
+        // // Configure PB5 as input for rising interrupt
         let user_btn = gpiob.pb5.into_floating_input();
         exti.listen(
             &mut rcc,
@@ -155,6 +155,7 @@ const APP: () = {
             user_btn.i,
             TriggerEdge::Rising,
         );
+
 
         let sck = gpiob.pb3;
         let miso = gpioa.pa6;
@@ -409,11 +410,12 @@ const APP: () = {
 
     #[interrupt(priority = 3, resources = [SX1276_DIO0, USR_BTN, EXTI], spawn = [radio_event, gps_event])]
     fn EXTI4_15() {
+        static mut COUNT: u16 = 0;
         let reg = resources.EXTI.get_pending_irq();
 
         if exti::line_is_triggered(reg, resources.SX1276_DIO0.i) {
             resources.EXTI.clear_irq(resources.SX1276_DIO0.i);
-            spawn.radio_event(RfEvent::DIO0);
+            spawn.radio_event(RfEvent::DIO0);            
         } 
         if exti::line_is_triggered(reg, resources.USR_BTN.i) {
             resources.EXTI.clear_irq(resources.USR_BTN.i);

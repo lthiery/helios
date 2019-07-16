@@ -51,6 +51,14 @@ where
     }
 }
 
+
+
+pub enum GpsEvent {
+    AccelInt,
+    UserButton,
+}
+
+
 #[rtfm::app(device = stm32l0xx_hal::pac)]
 const APP: () = {
     static mut EXTI: pac::EXTI = ();
@@ -71,16 +79,19 @@ const APP: () = {
         >,
     > = ();
     static mut ACCEL: bma400::Bma400 = ();
+    static mut USR_BTN: stm32l0xx_hal::gpio::gpiob::PB5<
+        stm32l0xx_hal::gpio::Input<stm32l0xx_hal::gpio::Floating>,
+    > = ();
     static mut UBX: ubx::Ubx = ();
     static mut ANT_SW: AntennaSwitches<
         stm32l0xx_hal::gpio::gpioa::PA1<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>,
         stm32l0xx_hal::gpio::gpioc::PC2<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>,
         stm32l0xx_hal::gpio::gpioc::PC1<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>,
     > = ();
-    static mut WD: stm32l0xx_hal::watchdog::IndependedWatchdog = ();
-    static mut DELAY: stm32l0xx_hal::delay::Delay = (); 
+    //static mut WD: stm32l0xx_hal::watchdog::IndependedWatchdog = ();
+    static mut DELAY: stm32l0xx_hal::delay::Delay = ();
 
-    #[init(resources = [BUFFER])]
+    #[init(resources = [BUFFER], spawn = [gps_event])]
     fn init() -> init::LateResources {
         // Configure the clock.
         let mut rcc = device.RCC.freeze(Config::hsi16());
@@ -135,6 +146,16 @@ const APP: () = {
             TriggerEdge::All,
         );
 
+        // Configure PB5 as input for rising interrupt
+        let user_btn = gpiob.pb5.into_floating_input();
+        exti.listen(
+            &mut rcc,
+            &mut device.SYSCFG_COMP,
+            user_btn.port,
+            user_btn.i,
+            TriggerEdge::Rising,
+        );
+
         let sck = gpiob.pb3;
         let miso = gpioa.pa6;
         let mosi = gpioa.pa7;
@@ -176,8 +197,7 @@ const APP: () = {
 
         reset.set_high();
 
-
-        let raw_device_id = unsafe {::core::ptr::read(0x1FF8_0064 as *const u32)};
+        let raw_device_id = unsafe { ::core::ptr::read(0x1FF8_0064 as *const u32) };
         let device_id: u16 = (raw_device_id as u16) | ((raw_device_id & 0xFF0000) >> 8) as u16;
         write!(tx, "Device ID = {:x}\r\n", device_id).unwrap();
 
@@ -186,13 +206,15 @@ const APP: () = {
             qos: QualityOfService::QOS_0,
             network_poll: 0,
             device_id,
-            oui: 0x365aabe7
+            oui: 0x365aabe7,
         });
         LongFi::set_buffer(resources.BUFFER);
 
         let gps_tx_pin = gpioa.pa9;
         let gps_rx_pin = gpioa.pa10;
+        let mut gps_vbackup = gpioa.pa4.into_push_pull_output();
 
+        gps_vbackup.set_high();
         // Configure the serial peripheral.
         let mut serial = device
             .USART1
@@ -204,6 +226,7 @@ const APP: () = {
             .unwrap();
 
         serial.listen(serial::Event::Rxne);
+
         gps_enable.set_high();
         let (mut gps_tx, mut gps_rx) = serial.split();
 
@@ -217,23 +240,15 @@ const APP: () = {
         let accel = bma400::Bma400::new(false);
 
         accel.wake(&mut i2c);
-        accel.configure_inactivity_interupt(&mut i2c, 0x003F);
 
         let ubx = ubx::Ubx::new();
-        ubx.enable_ubx_protocol(&mut gps_tx);
-        delay.delay_ms(50_u16);
-        ubx.enable_ubx_protocol(&mut gps_tx);
-        delay.delay_ms(50_u16);
-        ubx.enable_nav_pvt(&mut gps_tx);
-        delay.delay_ms(50_u16);
-        ubx.enable_ext_ant(&mut gps_tx);
 
         // Configure the independent watchdog.
-        let mut watchdog = device.IWDG.watchdog();
+        //let mut watchdog = device.IWDG.watchdog();
 
         // Start a watchdog with a 1000ms period.
-        watchdog.start(1000.ms());
-        
+        //watchdog.start(1000.ms());
+        spawn.gps_event(GpsEvent::AccelInt);
         // Return the initialised resources.
         init::LateResources {
             EXTI: exti,
@@ -247,34 +262,77 @@ const APP: () = {
             GPS_EN: gps_ldo_en,
             UBX: ubx,
             ANT_SW: ant_sw,
-            WD: watchdog,
-            DELAY: delay
+            //WD: watchdog,
+            USR_BTN: user_btn,
+            DELAY: delay,
         }
     }
 
-    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, I2C, ACCEL, GPS_EN])]
-    fn accel_activity() {
-        let int_status = resources.ACCEL.get_int_status(resources.I2C).unwrap();
+    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, I2C, ACCEL, UBX, GPS_TX, GPS_EN, DELAY])]
+    fn gps_event(event: GpsEvent) {
+        //resources.WD.feed();
+        let mut ubx = resources.UBX;
 
-        if int_status == 0 {
-            write!(resources.DEBUG_UART, "Moving\r\n");
-        //resources.GPS_EN.set_high();
-        } else {
-            write!(resources.DEBUG_UART, "Idle\r\n");
-            //resources.GPS_EN.set_low();
+        match event {
+            GpsEvent::AccelInt => {
+                let int_status = resources.ACCEL.get_int_status(resources.I2C).unwrap();
+
+                if int_status == 0 {
+                    write!(resources.DEBUG_UART, "Moving\r\n");
+                    // update interrupt configuration
+                    resources
+                        .ACCEL
+                        .configure_interrupt(resources.I2C, bma400::IntType::Inactivity, 4800);
+
+                    resources.GPS_EN.set_high();
+                    ubx.enable_ubx_protocol(resources.GPS_TX);
+                    resources.DELAY.delay_ms(25 as u32);
+                    ubx.enable_ubx_protocol(resources.GPS_TX);
+                    resources.DELAY.delay_ms(25 as u32);
+                    ubx.enable_nav_pvt(resources.GPS_TX);
+                    resources.DELAY.delay_ms(25 as u32);
+                    ubx.enable_ext_ant(resources.GPS_TX);
+
+                    match ubx.mode {
+                        ubx::Mode::HighPower => ubx.enable_high_power(resources.GPS_TX),
+                        ubx::Mode::LowPower => ubx.enable_low_power(resources.GPS_TX),
+                    }
+                } else {
+                    write!(resources.DEBUG_UART, "Idle\r\n");
+                    // update interrupt configuration
+                    resources
+                        .ACCEL
+                        .configure_interrupt(resources.I2C, bma400::IntType::Activity, 160);
+                    resources.GPS_EN.set_low();
+                }
+            }
+            GpsEvent::UserButton => {
+                match ubx.mode {
+                    ubx::Mode::HighPower => {
+                        write!(resources.DEBUG_UART, "Low Power\r\n");
+                        ubx.enable_low_power(resources.GPS_TX);
+                        ubx.mode = ubx::Mode::LowPower;
+
+                    }
+                    ubx::Mode::LowPower => {
+                        write!(resources.DEBUG_UART, "High Power\r\n");
+                        ubx.enable_high_power(resources.GPS_TX);
+                        ubx.mode = ubx::Mode::HighPower;
+                    }
+                }
+            }
         }
+        
     }
 
-    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, BUFFER, ANT_SW, WD])]
+    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, BUFFER, ANT_SW])]
     fn radio_event(event: RfEvent) {
-        resources.WD.feed();
+        //resources.WD.feed();
         let client_event = LongFi::handle_event(event);
 
         match client_event {
             ClientEvent::ClientEvent_TxDone => {
                 write!(resources.DEBUG_UART, "=>Transmit Done!\r\n\r\n").unwrap();
-                // resources.ANT_SW.set_rx();
-                // LongFi::set_rx();
             }
             ClientEvent::ClientEvent_Rx => {
                 // get receive buffer
@@ -303,11 +361,10 @@ const APP: () = {
         }
     }
 
-    #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, UBX, ANT_SW, WD, DELAY])]
+    #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, UBX, ANT_SW, DELAY])]
     fn ubx_parse(byte: u8) {
         static mut COUNT: u16 = 0;
-        resources.WD.feed();
-        
+
         if let Some(msg) = resources.UBX.push(byte) {
             match msg {
                 Message::NP(navpvt) => {
@@ -332,10 +389,10 @@ const APP: () = {
                     resources.ANT_SW.set_tx();
 
                     // get random u32 from LongFi and scale such as (0,250)
-                    let delay: u16 = (LongFi::get_random()/ 17179869) as u16;
+                    let delay: u16 = (LongFi::get_random() / 17179869) as u16;
                     // delay for that long to avoid collisions
                     resources.DELAY.delay_ms(delay);
-                    
+
                     LongFi::send(&packet, packet.len());
                     *COUNT = COUNT.wrapping_add(1);
                 }
@@ -350,23 +407,27 @@ const APP: () = {
         }
     }
 
-    #[interrupt(priority = 3, resources = [SX1276_DIO0, EXTI], spawn = [radio_event])]
+    #[interrupt(priority = 3, resources = [SX1276_DIO0, USR_BTN, EXTI], spawn = [radio_event, gps_event])]
     fn EXTI4_15() {
         let reg = resources.EXTI.get_pending_irq();
 
         if exti::line_is_triggered(reg, resources.SX1276_DIO0.i) {
             resources.EXTI.clear_irq(resources.SX1276_DIO0.i);
             spawn.radio_event(RfEvent::DIO0);
+        } 
+        if exti::line_is_triggered(reg, resources.USR_BTN.i) {
+            resources.EXTI.clear_irq(resources.USR_BTN.i);
+            spawn.gps_event(GpsEvent::UserButton);
         }
     }
 
-    #[interrupt(priority = 3, resources = [BMA400_INT1, EXTI], spawn = [accel_activity])]
+    #[interrupt(priority = 3, resources = [BMA400_INT1, EXTI], spawn = [gps_event])]
     fn EXTI0_1() {
         let reg = resources.EXTI.get_pending_irq();
 
         if exti::line_is_triggered(reg, resources.BMA400_INT1.i) {
             resources.EXTI.clear_irq(resources.BMA400_INT1.i);
-            spawn.accel_activity();
+            spawn.gps_event(GpsEvent::AccelInt);
         }
     }
 

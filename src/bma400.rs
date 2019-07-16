@@ -1,7 +1,12 @@
-use embedded_hal::blocking::i2c::{Read, Write, WriteRead};
+use embedded_hal::blocking::i2c::{Write, WriteRead};
 
 pub struct Bma400 {
     addr: u8,
+}
+
+pub enum IntType {
+    Activity,
+    Inactivity,
 }
 
 impl Bma400 {
@@ -53,9 +58,10 @@ impl Bma400 {
         self.read_addr(i2c, Register::IntStat0)
     }
 
-    pub fn configure_inactivity_interupt<I2C>(
+    pub fn configure_interrupt<I2C>(
         &self,
         i2c: &mut I2C,
+        int_type: IntType,
         delay: u16,
     ) -> Result<(), <I2C as Write>::Error>
     where
@@ -71,7 +77,11 @@ impl Bma400 {
         // update reference every time, hysteresis = 48 mg
         self.write_addr(i2c, Register::Gen1IntConfig0, 0xFA)?;
         // or all the things, inactivity triggers
-        self.write_addr(i2c, Register::Gen1IntConfig1, 0x00)?;
+        match int_type {
+            Activity => self.write_addr(i2c, Register::Gen1IntConfig1, 0x01)?,
+            Inactivity => self.write_addr(i2c, Register::Gen1IntConfig1, 0x00)?,
+        }
+
         // threshold is 8mb/lsb
         self.write_addr(i2c, Register::Gen1IntConfig2, 0x01)?;
         // set min duration

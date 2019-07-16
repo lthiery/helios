@@ -10,12 +10,19 @@ pub enum Message {
     NP(NavPvt),
 }
 
+#[derive(Copy, Clone)]
+pub enum Mode {
+    HighPower,
+    LowPower
+}
+
 pub struct Ubx {
     pub buffer: Vec<u8, U128>,
     pub prev_byte: u8,
     pub in_msg: bool,
     pub payload_len: u16,
     pub count: u16,
+    pub mode: Mode,
 }
 
 enum_from_primitive! {
@@ -112,6 +119,7 @@ impl Ubx {
             in_msg: false,
             payload_len: 0,
             count: 0,
+            mode: Mode::HighPower,
         }
     }
 
@@ -119,6 +127,20 @@ impl Ubx {
         self.in_msg = false;
         self.count = 0;
         self.payload_len = 0;
+    }
+
+    pub fn init<TX, DELAY>(&self, gps_tx: &mut TX, delay: &mut DELAY)
+    where
+        TX: embedded_hal::serial::Write<u8>,
+        DELAY: embedded_hal::blocking::delay::DelayMs<u32>,
+    {
+        self.enable_ubx_protocol(gps_tx);
+        delay.delay_ms(25);
+        self.enable_ubx_protocol(gps_tx);
+        delay.delay_ms(25);
+        self.enable_nav_pvt(gps_tx);
+        delay.delay_ms(25);
+        self.enable_ext_ant(gps_tx);
     }
 
     pub fn push(&mut self, byte: u8) -> Option<Message> {
@@ -217,6 +239,7 @@ impl Ubx {
             0x01,
             8,
             0x00, // length
+
             ClassId::Nav as u8,
             0x07,
             0x00, // port 0
@@ -230,6 +253,108 @@ impl Ubx {
         ];
         self.set_checksum_and_write(gps_tx, &mut enable_nav)
     }
+
+    pub fn enable_high_power<TX>(&self, gps_tx: &mut TX)
+    where
+        TX: embedded_hal::serial::Write<u8>,
+    {
+        //       HEADER1       HEADER2                  CLASS     ID
+        let mut cfg_rate = [
+            SYNC_1,
+            SYNC_2,
+            ClassId::Cfg as u8,
+            0x08,
+            6,
+            0x00, // length LSB
+
+            0xe8, // [0] measure rate LSB
+            0x3, // [1] measure rate MSB
+            1,    // [2] nav rate LSB
+            0,    // [3] nav rate MSB
+            0,    // [4] time ref LSB 
+            0,    // [5] time ref MSB
+
+            0x00,
+            0x00, // checksum bytes
+        ];
+        self.set_checksum_and_write(gps_tx, &mut cfg_rate);
+
+        //       HEADER1       HEADER2                  CLASS     ID
+        let mut cfg_pms = [
+            SYNC_1,
+            SYNC_2,
+            ClassId::Cfg as u8,
+            0x86,
+            8,
+            0x00, // length LSB
+
+            0x00, // [0] version = 0
+            0x03, // [1] power setup
+            1,    // [2] on period LSB
+            0x00, // [3] on period MSB
+            1,    // [4] on time LSB (smaller than period)
+            0x00, // [5] on time MSB
+            0x00, // [6] reserved
+            0x00, // [7] reserved
+
+            0x00,
+            0x00, // checksum bytes
+        ];
+        self.set_checksum_and_write(gps_tx, &mut cfg_pms)
+    }
+
+    pub fn enable_low_power<TX>(&self, gps_tx: &mut TX)
+    where
+        TX: embedded_hal::serial::Write<u8>,
+    {
+        //       HEADER1       HEADER2                  CLASS     ID
+        let mut cfg_rate = [
+            SYNC_1,
+            SYNC_2,
+            ClassId::Cfg as u8,
+            0x08,
+            6,
+            0x00, // length LSB
+
+            0x88, // [0] measure rate LSB
+            0x13, // [1] measure rate MSB
+            1,    // [2] nav rate LSB
+            0,    // [3] nav rate MSB
+            0,    // [4] time ref LSB 
+            0,    // [5] time ref MSB
+
+            0x00,
+            0x00, // checksum bytes
+        ];
+        self.set_checksum_and_write(gps_tx, &mut cfg_rate);
+
+        //       HEADER1       HEADER2                  CLASS     ID
+        let mut cfg_pms = [
+            SYNC_1,
+            SYNC_2,
+            ClassId::Cfg as u8,
+            0x86,
+            8,
+            0x00, // length LSB
+
+            0x00, // [0] version = 0
+            0x05, // [1] power setup
+            5,    // [2] on period LSB
+            0x00, // [3] on period MSB
+            5,    // [4] on time LSB (smaller than period)
+            0x00, // [5] on time MSB
+            0x00, // [6] reserved
+            0x00, // [7] reserved
+
+            0x00,
+            0x00, // checksum bytes
+        ];
+        self.set_checksum_and_write(gps_tx, &mut cfg_pms)
+    }
+
+
+
+   
 
     pub fn enable_ext_ant<TX>(&self, gps_tx: &mut TX)
     where

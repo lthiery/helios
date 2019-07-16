@@ -24,7 +24,7 @@ Use a .cargo/config as such:
 # uncomment ONE of these three option to make `cargo run` start a GDB session
 # which option to pick depends on your system
 # runner = "arm-none-eabi-gdb -q -x openocd.gdb"
-# runner = "gdb-multiarch -q -x openocd.gdb"
+# runner = "gdb-multiarch -q -x openocd.gdb"c
 # runner = "gdb -q -x openocd.gdb"
 runner = "gdb-multiarch -tui -q -x openocd.gdb"
 

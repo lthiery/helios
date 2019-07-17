@@ -88,7 +88,7 @@ const APP: () = {
         stm32l0xx_hal::gpio::gpioc::PC2<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>,
         stm32l0xx_hal::gpio::gpioc::PC1<stm32l0xx_hal::gpio::Output<stm32l0xx_hal::gpio::PushPull>>,
     > = ();
-    //static mut WD: stm32l0xx_hal::watchdog::IndependedWatchdog = ();
+    static mut WD: stm32l0xx_hal::watchdog::IndependedWatchdog = ();
     static mut DELAY: stm32l0xx_hal::delay::Delay = ();
 
     #[init(resources = [BUFFER], spawn = [gps_event])]
@@ -245,10 +245,11 @@ const APP: () = {
         let ubx = ubx::Ubx::new();
 
         // Configure the independent watchdog.
-        //let mut watchdog = device.IWDG.watchdog();
-
+        let mut watchdog = device.IWDG.watchdog();
         // Start a watchdog with a 1000ms period.
-        //watchdog.start(1000.ms());
+        watchdog.start(1000.ms());
+
+  
         spawn.gps_event(GpsEvent::AccelInt);
         // Return the initialised resources.
         init::LateResources {
@@ -263,15 +264,22 @@ const APP: () = {
             GPS_EN: gps_ldo_en,
             UBX: ubx,
             ANT_SW: ant_sw,
-            //WD: watchdog,
+            WD: watchdog,
             USR_BTN: user_btn,
             DELAY: delay,
         }
     }
 
+    #[idle(resources = [WD])]
+    fn idle() -> ! {
+        loop {
+            resources.WD.feed();
+        }
+    }
+
     #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, I2C, ACCEL, UBX, GPS_TX, GPS_EN, DELAY])]
     fn gps_event(event: GpsEvent) {
-        //resources.WD.feed();
+
         let mut ubx = resources.UBX;
 
         match event {
@@ -328,7 +336,7 @@ const APP: () = {
 
     #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, BUFFER, ANT_SW])]
     fn radio_event(event: RfEvent) {
-        //resources.WD.feed();
+
         let client_event = LongFi::handle_event(event);
 
         match client_event {

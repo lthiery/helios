@@ -291,7 +291,7 @@ const APP: () = {
                     // update interrupt configuration
                     resources
                         .ACCEL
-                        .configure_interrupt(resources.I2C, bma400::IntType::Inactivity, 4800);
+                        .configure_interrupt(resources.I2C, bma400::IntType::Inactivity, 4800*5);
 
                     resources.GPS_EN.set_high();
                     ubx.enable_ubx_protocol(resources.GPS_TX);

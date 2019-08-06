@@ -54,6 +54,11 @@ target = "thumbv6m-none-eabi"    # Cortex-M0 and Cortex-M0+
 
 Creating a DFU:
 
-You'll need to turn the cargo ouput into intel-hex for the DFU utility:
+You'll need to turn the cargo ouput into intel-hex for the DFU utility in Windows:
 `arm-none-eabi-objcopy -O ihex target/thumbv6m-none-eabi/release/helios helios.hex`
 
+Alternatively, you can upload a binary using dfu-util on any platform.
+First you need to create a binary:
+`arm-none-eabi-objcopy -O binary target/thumbv6m-none-eabi/release/helios helios.bin`
+Then you can use dfu-util to upload to the device:
+`./dfu-util -a 0 -s 0x08000000 -D helios.bin --device 0483:df11`

@@ -350,6 +350,7 @@ const APP: () = {
         match client_event {
             ClientEvent::ClientEvent_TxDone => {
                 write!(resources.DEBUG_UART, "=>Transmit Done!\r\n\r\n").unwrap();
+                // turn on blue led
                 resources.LED_BLUE.set_high(); 
             }
             ClientEvent::ClientEvent_Rx => {
@@ -413,7 +414,7 @@ const APP: () = {
 
                     LongFi::send(&packet, packet.len());
                     *COUNT = COUNT.wrapping_add(1);
-
+                    // turn off blue led
                     resources.LED_BLUE.set_low();
                 }
             }

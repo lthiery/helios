@@ -21,7 +21,7 @@ cast = { version = "0.2.2", default-features = false }
 nb = "0.1.2"
 panic-halt = "0.2.0"
 enum_primitive = {version = "*", git = "https://github.com/lthiery/enum_primitive-rs.git" }
-
+stm32l0xx-hal = {version = "0.2.0", features = ["stm32l0x2", "rt"]}
 
 [dependencies.stm32l0]
 version = "0.7.0"
@@ -35,13 +35,6 @@ panic-semihosting = "0.5.1"
 version = "0.2"
 default-features = false
 
-
 [dependencies.sx1276]
 git                     = "https://github.com/lthiery/sx1276-rs.git"
 branch					= "working-code"
-
-
-[dependencies.stm32l0xx-hal]
-path = "../stm32l0xx-hal"
-features = ["stm32l0x2", "rt"]
-

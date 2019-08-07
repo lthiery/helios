@@ -143,6 +143,7 @@ SECTIONS
   /DISCARD/ :
   {
     /* Unused exception related info that only wastes space */
+    *(.ARM.exidx);
     *(.ARM.exidx.*);
     *(.ARM.extab.*);
   }

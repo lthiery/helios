@@ -90,6 +90,7 @@ const APP: () = {
     > = ();
     static mut WD: stm32l0xx_hal::watchdog::IndependedWatchdog = ();
     static mut DELAY: stm32l0xx_hal::delay::Delay = ();
+    static mut LED_BLUE: gpiob::PB12<Output<PushPull>> = ();
 
     #[init(resources = [BUFFER], spawn = [gps_event])]
     fn init() -> init::LateResources {
@@ -123,6 +124,12 @@ const APP: () = {
         let mut gps_enable = gpioa.pa5.into_push_pull_output();
 
         gps_enable.set_low();
+
+        // Configure PB12 as output for Blue LED
+        let mut led_blue = gpiob.pb12.into_push_pull_output();
+
+        // Turn off Blue LED
+        led_blue.set_high();
 
         let exti = device.EXTI;
 
@@ -267,6 +274,7 @@ const APP: () = {
             WD: watchdog,
             USR_BTN: user_btn,
             DELAY: delay,
+            LED_BLUE: led_blue,
         }
     }
 
@@ -334,7 +342,7 @@ const APP: () = {
         
     }
 
-    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, BUFFER, ANT_SW])]
+    #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, BUFFER, ANT_SW, LED_BLUE])]
     fn radio_event(event: RfEvent) {
 
         let client_event = LongFi::handle_event(event);
@@ -342,6 +350,8 @@ const APP: () = {
         match client_event {
             ClientEvent::ClientEvent_TxDone => {
                 write!(resources.DEBUG_UART, "=>Transmit Done!\r\n\r\n").unwrap();
+                // Turn on blue led
+                resources.LED_BLUE.set_high(); 
             }
             ClientEvent::ClientEvent_Rx => {
                 // get receive buffer
@@ -370,7 +380,7 @@ const APP: () = {
         }
     }
 
-    #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, UBX, ANT_SW, DELAY])]
+    #[task(capacity = 16, priority = 2, resources = [DEBUG_UART, UBX, ANT_SW, DELAY, LED_BLUE])]
     fn ubx_parse(byte: u8) {
         static mut COUNT: u16 = 0;
 
@@ -404,6 +414,8 @@ const APP: () = {
 
                     LongFi::send(&packet, packet.len());
                     *COUNT = COUNT.wrapping_add(1);
+                    // Turn off blue led
+                    resources.LED_BLUE.set_low();
                 }
             }
         }

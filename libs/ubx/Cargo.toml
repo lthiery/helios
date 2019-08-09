@@ -1,0 +1,39 @@
+[package]
+authors = ["Louis Thiery <louis@helium.com>"]
+edition = "2018"
+readme = "README.md"
+name = "ubx"
+version = "0.1.0"
+
+[package.metadata.docs.rs]
+features = ["stm32l0x2", "rt"]
+
+[dependencies]
+embedded-hal = { version = "0.2.3", features = ["unproven"] }
+cortex-m = {version = "0.5.8", features = ["const-fn"] }
+cortex-m-rt = "0.6.7"
+cortex-m-semihosting = "0.3.2"
+cortex-m-rtfm = "0.4.3"
+heapless = "0.4.1"
+void = { version = "1.0.2", default-features = false }
+cast = { version = "0.2.2", default-features = false }
+nb = "0.1.2"
+panic-halt = "0.2.0"
+enum_primitive = {version = "*", git = "https://github.com/lthiery/enum_primitive-rs.git" }
+stm32l0xx-hal = {version = "0.2.0", features = ["stm32l0x2", "rt"]}
+
+[dependencies.stm32l0]
+version = "0.7.0"
+features = ["rt", "stm32l0x2"]
+
+[dev-dependencies]
+panic-halt = "0.2.0"
+panic-semihosting = "0.5.1"
+
+[dependencies.num-traits]
+version = "0.2"
+default-features = false
+
+[dependencies.sx1276]
+git                     = "https://github.com/lthiery/sx1276-rs.git"
+branch					= "working-code"

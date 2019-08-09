@@ -1,3 +1,12 @@
+#![no_std]
+
+#[macro_use]
+extern crate nb;
+use nb::block;
+
+#[macro_use]
+extern crate enum_primitive;
+
 use embedded_hal::blocking::i2c::{Write, WriteRead};
 
 pub struct Bma400 {

@@ -1,3 +1,11 @@
+#![no_std]
+#[macro_use]
+extern crate nb;
+use nb::block;
+
+#[macro_use]
+extern crate enum_primitive;
+
 use heapless::{consts::U128, Vec};
 
 pub const SYNC_1: u8 = 0xB5;

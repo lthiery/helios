@@ -67,28 +67,50 @@ impl Bma400 {
     where
         I2C: Write,
     {
-        // map gen1 to pin1
-        self.write_addr(i2c, Register::IntMap1, 0x04)?;
-        // non-latching
-        self.write_addr(i2c, Register::IntConf1, 0x00)?;
-        // int1 pin interrupt active high
-        self.write_addr(i2c, Register::Int12IoCtrl, 0x02)?;
+        // map gen1 to int1 pin
+        self.write_addr(i2c, Register::Int1Map, 0x04)?;
+        // map gen2 to int2 pin
+        self.write_addr(i2c, Register::Int2Map, 0x04)?;
+        // latching for both interrupts?
+        self.write_addr(i2c, Register::IntConf1, 0x80)?;
+
+        // int1 and int2 pin interrupt active high
+        self.write_addr(i2c, Register::Int12IoCtrl, 0x22)?;
+
         // enable x, y, z axis data source = acc_filt2 (fixed 100 Hz)
         // update reference every time, hysteresis = 48 mg
+        // int1
         self.write_addr(i2c, Register::Gen1IntConfig0, 0xFA)?;
+        // int2
+        self.write_addr(i2c, Register::Gen2IntConfig0, 0xFA)?;
+
         // or all the things, inactivity triggers
-        match int_type {
-            Activity => self.write_addr(i2c, Register::Gen1IntConfig1, 0x01)?,
-            Inactivity => self.write_addr(i2c, Register::Gen1IntConfig1, 0x00)?,
-        }
+        // match int_type {
+        //     Activity => self.write_addr(i2c, Register::Gen1IntConfig1, 0x01)?,
+        //     Inactivity => self.write_addr(i2c, Register::Gen1IntConfig1, 0x00)?,
+        // }
+
+        // Activity on int1
+        self.write_addr(i2c, Register::Gen1IntConfig1, 0x01)?;
+        // Inactivity on int2
+        self.write_addr(i2c, Register::Gen2IntConfig1, 0x00)?;
 
         // threshold is 8mb/lsb
-        self.write_addr(i2c, Register::Gen1IntConfig2, 0x01)?;
+        // int1
+        self.write_addr(i2c, Register::Gen1IntConfig2, 0x01)?; // This might be too sensitive
+        // int2
+        self.write_addr(i2c, Register::Gen2IntConfig2, 0x01)?;
+
         // set min duration
+        // int1
         self.write_addr(i2c, Register::Gen1IntConfig3, (delay >> 8) as u8)?;
         self.write_addr(i2c, Register::Gen1IntConfig31, delay as u8)?;
-        // enable gen1 interrupt in normal mode
-        self.write_addr(i2c, Register::IntConf0, 0x04)?;
+        // int2
+        self.write_addr(i2c, Register::Gen2IntConfig3, (delay >> 8) as u8)?;
+        self.write_addr(i2c, Register::Gen2IntConfig31, delay as u8)?;       
+
+        // enable gen1 and gen2 interrupt in normal mode
+        self.write_addr(i2c, Register::IntConf0, 0xC)?;
         Ok(())
     }
 }
@@ -113,8 +135,8 @@ pub enum Register {
     IntConf0 = 0x1F,
     IntConf1 = 0x20,
     Int12IoCtrl = 0x24,
-    IntMap1 = 0x21,
-    IntMap2 = 0x22,
+    Int1Map = 0x21,
+    Int2Map = 0x22,
     FifoConfig0 = 0x26,
     FifoReadEn = 0x29,
     AutoLowPow0 = 0x2A,

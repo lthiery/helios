@@ -257,7 +257,7 @@ const APP: () = {
 
         // Wake and Config Accelerometer
         accel.wake(&mut i2c);
-        accel.configure_interrupt(&mut i2c, bma400::IntType::Inactivity, 4800 * 5);
+        accel.configure_interrupt(&mut i2c);
 
         let ubx = ubx::Ubx::new();
 

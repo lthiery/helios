@@ -51,19 +51,18 @@ where
     }
 }
 
-
-
 pub enum GpsEvent {
-    AccelInt,
+    AccelInt1,
+    AccelInt2,
     UserButton,
 }
-
 
 #[rtfm::app(device = stm32l0xx_hal::pac)]
 const APP: () = {
     static mut EXTI: pac::EXTI = ();
     static mut SX1276_DIO0: gpiob::PB4<Input<PullUp>> = ();
     static mut BMA400_INT1: gpioa::PA0<Input<Floating>> = ();
+    static mut BMA400_INT2: gpiob::PB6<Input<Floating>> = ();
     static mut DEBUG_UART: serial::Tx<stm32l0::stm32l0x2::USART2> = ();
     static mut BUFFER: [u8; 512] = [0; 512];
     static mut GPS_EN: gpiob::PB2<Output<PushPull>> = ();
@@ -143,17 +142,27 @@ const APP: () = {
             TriggerEdge::Rising,
         );
 
-        // Configure PB5 as input for rising interrupt
+        // Configure A0 as input for rising interrupt on activity
         let accel_int1 = gpioa.pa0.into_floating_input();
         exti.listen(
             &mut rcc,
             &mut device.SYSCFG_COMP,
             accel_int1.port,
             accel_int1.i,
-            TriggerEdge::All,
+            TriggerEdge::Rising,
         );
 
-        // // Configure PB5 as input for rising interrupt
+        // Configure B6 as input for rising interrupt on inactivity
+        let accel_int2 = gpiob.pb6.into_floating_input();
+        exti.listen(
+            &mut rcc,
+            &mut device.SYSCFG_COMP,
+            accel_int2.port,
+            accel_int2.i,
+            TriggerEdge::Rising,
+        );
+
+        // Configure PB5 as input for rising interrupt
         let user_btn = gpiob.pb5.into_floating_input();
         exti.listen(
             &mut rcc,
@@ -162,7 +171,6 @@ const APP: () = {
             user_btn.i,
             TriggerEdge::Rising,
         );
-
 
         let sck = gpiob.pb3;
         let miso = gpioa.pa6;
@@ -247,7 +255,9 @@ const APP: () = {
 
         let accel = bma400::Bma400::new(false);
 
+        // Wake and Config Accelerometer
         accel.wake(&mut i2c);
+        accel.configure_interrupt(&mut i2c, bma400::IntType::Inactivity, 4800 * 5);
 
         let ubx = ubx::Ubx::new();
 
@@ -256,13 +266,12 @@ const APP: () = {
         // Start a watchdog with a 1000ms period.
         watchdog.start(1000.ms());
 
-  
-        spawn.gps_event(GpsEvent::AccelInt);
         // Return the initialised resources.
         init::LateResources {
             EXTI: exti,
             SX1276_DIO0: sx1276_dio0,
             BMA400_INT1: accel_int1,
+            BMA400_INT2: accel_int2,
             DEBUG_UART: tx,
             GPS_TX: gps_tx,
             GPS_RX: gps_rx,
@@ -287,19 +296,16 @@ const APP: () = {
 
     #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, I2C, ACCEL, UBX, GPS_TX, GPS_EN, DELAY])]
     fn gps_event(event: GpsEvent) {
-
+        static mut ACTIVE: bool = false;
         let mut ubx = resources.UBX;
 
-        match event {
-            GpsEvent::AccelInt => {
-                let int_status = resources.ACCEL.get_int_status(resources.I2C).unwrap();
+        let int_status = resources.ACCEL.get_int_status(resources.I2C).unwrap();
+        write!(resources.DEBUG_UART, "INT STAT: {}\r\n", int_status);
 
-                if int_status == 0 {
+        match event {
+            GpsEvent::AccelInt1 => {
+                if !*ACTIVE {
                     write!(resources.DEBUG_UART, "Moving\r\n");
-                    // update interrupt configuration
-                    resources
-                        .ACCEL
-                        .configure_interrupt(resources.I2C, bma400::IntType::Inactivity, 4800*5);
 
                     resources.GPS_EN.set_high();
                     ubx.enable_ubx_protocol(resources.GPS_TX);
@@ -314,44 +320,38 @@ const APP: () = {
                         ubx::Mode::HighPower => ubx.enable_high_power(resources.GPS_TX),
                         ubx::Mode::LowPower => ubx.enable_low_power(resources.GPS_TX),
                     }
-                } else {
-                    write!(resources.DEBUG_UART, "Idle\r\n");
-                    // update interrupt configuration
-                    resources
-                        .ACCEL
-                        .configure_interrupt(resources.I2C, bma400::IntType::Activity, 160);
-                    resources.GPS_EN.set_low();
+                    *ACTIVE = true;
                 }
             }
-            GpsEvent::UserButton => {
-                match ubx.mode {
-                    ubx::Mode::HighPower => {
-                        write!(resources.DEBUG_UART, "Low Power\r\n");
-                        ubx.enable_low_power(resources.GPS_TX);
-                        ubx.mode = ubx::Mode::LowPower;
-
-                    }
-                    ubx::Mode::LowPower => {
-                        write!(resources.DEBUG_UART, "High Power\r\n");
-                        ubx.enable_high_power(resources.GPS_TX);
-                        ubx.mode = ubx::Mode::HighPower;
-                    }
-                }
+            GpsEvent::AccelInt2 => {
+                write!(resources.DEBUG_UART, "Idle\r\n");
+                resources.GPS_EN.set_low();
+                *ACTIVE = false;
             }
+            GpsEvent::UserButton => match ubx.mode {
+                ubx::Mode::HighPower => {
+                    write!(resources.DEBUG_UART, "Low Power\r\n");
+                    ubx.enable_low_power(resources.GPS_TX);
+                    ubx.mode = ubx::Mode::LowPower;
+                }
+                ubx::Mode::LowPower => {
+                    write!(resources.DEBUG_UART, "High Power\r\n");
+                    ubx.enable_high_power(resources.GPS_TX);
+                    ubx.mode = ubx::Mode::HighPower;
+                }
+            },
         }
-        
     }
 
     #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, BUFFER, ANT_SW, LED_BLUE])]
     fn radio_event(event: RfEvent) {
-
         let client_event = LongFi::handle_event(event);
 
         match client_event {
             ClientEvent::ClientEvent_TxDone => {
                 write!(resources.DEBUG_UART, "=>Transmit Done!\r\n\r\n").unwrap();
                 // Turn on blue led
-                resources.LED_BLUE.set_high(); 
+                resources.LED_BLUE.set_high();
             }
             ClientEvent::ClientEvent_Rx => {
                 // get receive buffer
@@ -428,18 +428,22 @@ const APP: () = {
         }
     }
 
-    #[interrupt(priority = 3, resources = [SX1276_DIO0, USR_BTN, EXTI], spawn = [radio_event, gps_event])]
+    #[interrupt(priority = 3, resources = [SX1276_DIO0, USR_BTN, BMA400_INT2, EXTI], spawn = [radio_event, gps_event])]
     fn EXTI4_15() {
         static mut COUNT: u16 = 0;
         let reg = resources.EXTI.get_pending_irq();
 
         if exti::line_is_triggered(reg, resources.SX1276_DIO0.i) {
             resources.EXTI.clear_irq(resources.SX1276_DIO0.i);
-            spawn.radio_event(RfEvent::DIO0);            
-        } 
+            spawn.radio_event(RfEvent::DIO0);
+        }
         if exti::line_is_triggered(reg, resources.USR_BTN.i) {
             resources.EXTI.clear_irq(resources.USR_BTN.i);
             spawn.gps_event(GpsEvent::UserButton);
+        }
+        if exti::line_is_triggered(reg, resources.BMA400_INT2.i) {
+            resources.EXTI.clear_irq(resources.BMA400_INT2.i);
+            spawn.gps_event(GpsEvent::AccelInt2);
         }
     }
 
@@ -449,7 +453,7 @@ const APP: () = {
 
         if exti::line_is_triggered(reg, resources.BMA400_INT1.i) {
             resources.EXTI.clear_irq(resources.BMA400_INT1.i);
-            spawn.gps_event(GpsEvent::AccelInt);
+            spawn.gps_event(GpsEvent::AccelInt1);
         }
     }
 

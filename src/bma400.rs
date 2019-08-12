@@ -70,9 +70,9 @@ impl Bma400 {
         // map gen1 to int1 pin
         self.write_addr(i2c, Register::Int1Map, 0x04)?;
         // map gen2 to int2 pin
-        self.write_addr(i2c, Register::Int2Map, 0x04)?;
-        // latching for both interrupts?
-        self.write_addr(i2c, Register::IntConf1, 0x80)?;
+        self.write_addr(i2c, Register::Int2Map, 0x08)?;
+        // non-latching for both interrupts
+        self.write_addr(i2c, Register::IntConf1, 0x00)?;
 
         // int1 and int2 pin interrupt active high
         self.write_addr(i2c, Register::Int12IoCtrl, 0x22)?;
@@ -84,30 +84,26 @@ impl Bma400 {
         // int2
         self.write_addr(i2c, Register::Gen2IntConfig0, 0xFA)?;
 
-        // or all the things, inactivity triggers
-        // match int_type {
-        //     Activity => self.write_addr(i2c, Register::Gen1IntConfig1, 0x01)?,
-        //     Inactivity => self.write_addr(i2c, Register::Gen1IntConfig1, 0x00)?,
-        // }
-
         // Activity on int1
-        self.write_addr(i2c, Register::Gen1IntConfig1, 0x01)?;
+        self.write_addr(i2c, Register::Gen1IntConfig1, 0x02)?;
         // Inactivity on int2
         self.write_addr(i2c, Register::Gen2IntConfig1, 0x00)?;
 
         // threshold is 8mb/lsb
         // int1
-        self.write_addr(i2c, Register::Gen1IntConfig2, 0x01)?; // This might be too sensitive
+        self.write_addr(i2c, Register::Gen1IntConfig2, 0x01)?;
         // int2
         self.write_addr(i2c, Register::Gen2IntConfig2, 0x01)?;
 
         // set min duration
         // int1
-        self.write_addr(i2c, Register::Gen1IntConfig3, (delay >> 8) as u8)?;
-        self.write_addr(i2c, Register::Gen1IntConfig31, delay as u8)?;
+        let delay1 = 15;
+        self.write_addr(i2c, Register::Gen1IntConfig3, (delay1 >> 8) as u8)?;
+        self.write_addr(i2c, Register::Gen1IntConfig31, delay1 as u8)?;
         // int2
-        self.write_addr(i2c, Register::Gen2IntConfig3, (delay >> 8) as u8)?;
-        self.write_addr(i2c, Register::Gen2IntConfig31, delay as u8)?;       
+        let delay2 = 4800 * 5;
+        self.write_addr(i2c, Register::Gen2IntConfig3, (delay2 >> 8) as u8)?;
+        self.write_addr(i2c, Register::Gen2IntConfig31, delay2 as u8)?;
 
         // enable gen1 and gen2 interrupt in normal mode
         self.write_addr(i2c, Register::IntConf0, 0xC)?;

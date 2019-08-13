@@ -296,7 +296,6 @@ const APP: () = {
 
     #[task(capacity = 4, priority = 2, resources = [DEBUG_UART, I2C, ACCEL, UBX, GPS_TX, GPS_EN, DELAY])]
     fn gps_event(event: GpsEvent) {
-        static mut ACTIVE: bool = false;
         let mut ubx = resources.UBX;
 
         let int_status = resources.ACCEL.get_int_status(resources.I2C).unwrap();
@@ -304,29 +303,34 @@ const APP: () = {
 
         match event {
             GpsEvent::AccelActivity => {
-                if !*ACTIVE {
-                    write!(resources.DEBUG_UART, "Moving\r\n");
+                match ubx.power { 
+                    ubx::Power::Disabled => {
+                        write!(resources.DEBUG_UART, "Moving\r\n");
 
-                    resources.GPS_EN.set_high();
-                    ubx.enable_ubx_protocol(resources.GPS_TX);
-                    resources.DELAY.delay_ms(25 as u32);
-                    ubx.enable_ubx_protocol(resources.GPS_TX);
-                    resources.DELAY.delay_ms(25 as u32);
-                    ubx.enable_nav_pvt(resources.GPS_TX);
-                    resources.DELAY.delay_ms(25 as u32);
-                    ubx.enable_ext_ant(resources.GPS_TX);
+                        resources.GPS_EN.set_high();
+                        ubx.enable_ubx_protocol(resources.GPS_TX);
+                        resources.DELAY.delay_ms(25 as u32);
+                        ubx.enable_ubx_protocol(resources.GPS_TX);
+                        resources.DELAY.delay_ms(25 as u32);
+                        ubx.enable_nav_pvt(resources.GPS_TX);
+                        resources.DELAY.delay_ms(25 as u32);
+                        ubx.enable_ext_ant(resources.GPS_TX);
 
-                    match ubx.mode {
-                        ubx::Mode::HighPower => ubx.enable_high_power(resources.GPS_TX),
-                        ubx::Mode::LowPower => ubx.enable_low_power(resources.GPS_TX),
+                        match ubx.mode {
+                            ubx::Mode::HighPower => ubx.enable_high_power(resources.GPS_TX),
+                            ubx::Mode::LowPower => ubx.enable_low_power(resources.GPS_TX),
+                        }
+                        ubx.power = ubx::Power::Enabled;
                     }
-                    *ACTIVE = true;
+                    ubx::Power::Enabled => {
+                        write!(resources.DEBUG_UART, "GPS Already Enabled\r\n");
+                    }
                 }
             }
             GpsEvent::AccelInactivity => {
                 write!(resources.DEBUG_UART, "Idle\r\n");
                 resources.GPS_EN.set_low();
-                *ACTIVE = false;
+                ubx.power = ubx::Power::Disabled;   
             }
             GpsEvent::UserButton => match ubx.mode {
                 ubx::Mode::HighPower => {

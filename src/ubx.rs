@@ -13,7 +13,12 @@ pub enum Message {
 #[derive(Copy, Clone)]
 pub enum Mode {
     HighPower,
-    LowPower
+    LowPower,
+}
+
+pub enum Power {
+    Enabled,
+    Disabled,
 }
 
 pub struct Ubx {
@@ -23,6 +28,7 @@ pub struct Ubx {
     pub payload_len: u16,
     pub count: u16,
     pub mode: Mode,
+    pub power: Power, 
 }
 
 enum_from_primitive! {
@@ -120,6 +126,7 @@ impl Ubx {
             payload_len: 0,
             count: 0,
             mode: Mode::HighPower,
+            power: Power::Disabled,
         }
     }
 

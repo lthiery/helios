@@ -52,8 +52,8 @@ where
 }
 
 pub enum GpsEvent {
-    AccelInt1,
-    AccelInt2,
+    Activity,
+    Inactivity,
     UserButton,
 }
 
@@ -303,7 +303,7 @@ const APP: () = {
         write!(resources.DEBUG_UART, "INT STAT: {}\r\n", int_status);
 
         match event {
-            GpsEvent::AccelInt1 => {
+            GpsEvent::Activity => {
                 if !*ACTIVE {
                     write!(resources.DEBUG_UART, "Moving\r\n");
 
@@ -323,7 +323,7 @@ const APP: () = {
                     *ACTIVE = true;
                 }
             }
-            GpsEvent::AccelInt2 => {
+            GpsEvent::Inactivity => {
                 write!(resources.DEBUG_UART, "Idle\r\n");
                 resources.GPS_EN.set_low();
                 *ACTIVE = false;
@@ -443,7 +443,7 @@ const APP: () = {
         }
         if exti::line_is_triggered(reg, resources.BMA400_INT2.i) {
             resources.EXTI.clear_irq(resources.BMA400_INT2.i);
-            spawn.gps_event(GpsEvent::AccelInt2);
+            spawn.gps_event(GpsEvent::Inactivity);
         }
     }
 
@@ -453,7 +453,7 @@ const APP: () = {
 
         if exti::line_is_triggered(reg, resources.BMA400_INT1.i) {
             resources.EXTI.clear_irq(resources.BMA400_INT1.i);
-            spawn.gps_event(GpsEvent::AccelInt1);
+            spawn.gps_event(GpsEvent::Activity);
         }
     }
 

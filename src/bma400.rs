@@ -9,9 +9,6 @@ pub enum IntType {
     Inactivity,
 }
 
-const ACTIVITY_DURATION: u16 = 15;
-const INACTIVITY_DURATION: u16 = 24000; //4 min
-
 impl Bma400 {
     pub fn new(sdo_position: bool) -> Bma400 {
         Bma400 {
@@ -61,7 +58,12 @@ impl Bma400 {
         self.read_addr(i2c, Register::IntStat0)
     }
 
-    pub fn configure_interrupt<I2C>(&self, i2c: &mut I2C) -> Result<(), <I2C as Write>::Error>
+    pub fn configure_interrupt<I2C>(
+        &self,
+        i2c: &mut I2C,
+        activity_duration: u16,
+        inactivity_duration: u16,
+    ) -> Result<(), <I2C as Write>::Error>
     where
         I2C: Write,
     {
@@ -98,16 +100,16 @@ impl Bma400 {
         self.write_addr(
             i2c,
             Register::Gen1IntConfig3,
-            (ACTIVITY_DURATION >> 8) as u8,
+            (activity_duration >> 8) as u8,
         )?;
-        self.write_addr(i2c, Register::Gen1IntConfig31, ACTIVITY_DURATION as u8)?;
+        self.write_addr(i2c, Register::Gen1IntConfig31, activity_duration as u8)?;
         // int2
         self.write_addr(
             i2c,
             Register::Gen2IntConfig3,
-            (INACTIVITY_DURATION >> 8) as u8,
+            (inactivity_duration >> 8) as u8,
         )?;
-        self.write_addr(i2c, Register::Gen2IntConfig31, INACTIVITY_DURATION as u8)?;
+        self.write_addr(i2c, Register::Gen2IntConfig31, inactivity_duration as u8)?;
 
         // enable gen1 and gen2 interrupt in normal mode
         self.write_addr(i2c, Register::IntConf0, 0xC)?;
